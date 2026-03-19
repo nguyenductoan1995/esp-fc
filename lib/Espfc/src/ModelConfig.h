@@ -88,6 +88,8 @@ enum FlightMode {
   MODE_FAILSAFE,
   MODE_BLACKBOX,
   MODE_BLACKBOX_ERASE,
+  MODE_POSHOLD,
+  MODE_GPS_RESCUE,
   MODE_COUNT,
 };
 
@@ -670,6 +672,8 @@ struct GpsConfig
 {
   uint8_t minSats = 8;
   uint8_t setHomeOnce = 1;
+  uint8_t maxLeanAngle = 25;   // degrees max lean during position hold / RTH
+  uint8_t rthAltitude = 10;    // meters minimum RTH altitude
 };
 
 struct LedConfig

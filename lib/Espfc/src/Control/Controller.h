@@ -3,6 +3,7 @@
 #include "Model.h"
 #include "Control/Rates.h"
 #include "Control/Altitude.hpp"
+#include "Control/GpsNavigation.hpp"
 
 namespace Espfc::Control {
 
@@ -31,6 +32,7 @@ class Controller
     Model& _model;
     Rates _rates;
     Utils::Filter _speedFilter;
+    GpsNavigation _gpsNav;
 };
 
 }

@@ -1537,9 +1537,9 @@ void MspProcessor::processCommand(MspMessage& m, MspResponse& r, Device::SerialD
       break;
 
   case MSP_COMP_GPS:
-      r.writeU16(0); // GPS_distanceToHome
-      r.writeU16(0); // GPS_directionToHome / 10 // resolution increased in Betaflight 4.4 by factor of 10, this maintains backwards compatibility for DJI OSD
-      r.writeU8(0);  // GPS_update & 1 // direct or msp
+      r.writeU16(_model.state.gps.distanceToHome);                  // GPS_distanceToHome (meters)
+      r.writeU16((uint16_t)(_model.state.gps.directionToHome / 10)); // GPS_directionToHome / 10
+      r.writeU8(_model.state.gps.fix ? 1 : 0);                      // GPS_update
       break;
 
   case MSP_GPSSVINFO:

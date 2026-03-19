@@ -244,6 +244,15 @@ void FAST_CODE_ATTR Input::failsafeStage2()
   _model.state.input.rxFailSafe = true;
   if(_model.isModeActive(MODE_ARMED))
   {
+    // Attempt GPS rescue if GPS is available and home is set
+    if(_model.gpsActive() && _model.state.gps.homeSet && _model.state.gps.fix
+       && _model.state.gps.numSats >= _model.config.gps.minSats
+       && !_model.isModeActive(MODE_GPS_RESCUE))
+    {
+      _model.state.failsafe.phase = FC_FAILSAFE_GPS_RESCUE;
+      _model.state.mode.mask |= (1 << MODE_GPS_RESCUE);
+      return;
+    }
     _model.state.failsafe.phase = FC_FAILSAFE_LANDED;
     _model.disarm(DISARM_REASON_FAILSAFE);
   }

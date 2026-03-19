@@ -4,7 +4,7 @@
 
 namespace Espfc::Control {
 
-Controller::Controller(Model& model): _model(model) {}
+Controller::Controller(Model& model): _model(model), _gpsNav(model) {}
 
 int Controller::begin()
 {
@@ -17,6 +17,7 @@ int Controller::begin()
   beginOuterLoop(AXIS_ROLL);
   beginOuterLoop(AXIS_PITCH);
   beginAltHold();
+  _gpsNav.begin();
 
   return 1;
 }
@@ -121,8 +122,21 @@ void Controller::innerLoopRobot()
 
 void FAST_CODE_ATTR Controller::outerLoop()
 {
+  // Update GPS navigation (distance/bearing + position setpoint)
+  _gpsNav.update();
+
   // Roll/Pitch rates control
-  if(_model.isModeActive(MODE_ANGLE))
+  const bool gpsActive = _model.isModeActive(MODE_POSHOLD) || _model.isModeActive(MODE_GPS_RESCUE);
+  if(gpsActive)
+  {
+    // Position hold / RTH: use angle setpoints from GPS navigation controller
+    for(size_t i = 0; i < AXIS_COUNT_RP; i++)
+    {
+      _model.state.setpoint.rate[i] = _model.state.outerPid[i].update(_model.state.gps.posSetpoint[i], _model.state.attitude.euler[i]);
+      _model.state.innerPid[i].fScale = 0.f;
+    }
+  }
+  else if(_model.isModeActive(MODE_ANGLE))
   {
     for(size_t i = 0; i < AXIS_COUNT_RP; i++)
     {
@@ -144,7 +158,7 @@ void FAST_CODE_ATTR Controller::outerLoop()
   _model.state.setpoint.rate[AXIS_YAW] = calculateSetpointRate(AXIS_YAW, _model.state.input.ch[AXIS_YAW]);
 
   // thrust control
-  if(_model.isModeActive(MODE_ALTHOLD))
+  if(_model.isModeActive(MODE_ALTHOLD) || gpsActive)
   {
     _model.state.setpoint.rate[AXIS_THRUST] = calcualteAltHoldSetpoint();
   }

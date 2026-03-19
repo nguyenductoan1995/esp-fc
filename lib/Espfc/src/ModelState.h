@@ -120,7 +120,8 @@ enum FailsafePhase {
   FC_FAILSAFE_LANDING,
   FC_FAILSAFE_LANDED,
   FC_FAILSAFE_RX_LOSS_MONITORING,
-  FC_FAILSAFE_RX_LOSS_RECOVERED
+  FC_FAILSAFE_RX_LOSS_RECOVERED,
+  FC_FAILSAFE_GPS_RESCUE
 };
 
 class FailsafeState
@@ -461,6 +462,12 @@ struct GpsState
   GpsAccuracy accuracy;
   GpsDateTime dateTime;
   GpsSatelite svinfo[SAT_MAX];
+
+  // navigation computed fields
+  uint16_t distanceToHome = 0;  // meters
+  int16_t  directionToHome = 0; // degrees -180..180 (relative to craft heading)
+  float    bearingToHome = 0.f; // radians (absolute)
+  float    posSetpoint[2] = {}; // [roll, pitch] angle setpoints in radians from position controller
 };
 
 // runtime data
