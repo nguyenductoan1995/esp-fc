@@ -304,13 +304,14 @@ void Fusion::lerpFusion()
 
 void Fusion::madgwickFusion()
 {
-  if(false && _model.magActive())
+  if(_model.magActive() && _model.state.mag.calibrationValid && _model.state.mag.updated)
   {
     _madgwick.update(
       _model.state.attitude.rate.x, _model.state.attitude.rate.y, _model.state.attitude.rate.z,
       _model.state.accel.adc.x, _model.state.accel.adc.y, _model.state.accel.adc.z,
       _model.state.mag.adc.x,   _model.state.mag.adc.y,   _model.state.mag.adc.z
     );
+    _model.state.mag.updated = false;
   }
   else
   {
@@ -325,13 +326,14 @@ void Fusion::madgwickFusion()
 
 void FAST_CODE_ATTR Fusion::mahonyFusion()
 {
-  if(false && _model.magActive())
+  if(_model.magActive() && _model.state.mag.calibrationValid && _model.state.mag.updated)
   {
     _mahony.update(
       _model.state.attitude.rate.x, _model.state.attitude.rate.y, _model.state.attitude.rate.z,
       _model.state.accel.adc.x, _model.state.accel.adc.y, _model.state.accel.adc.z,
       _model.state.mag.adc.x,   _model.state.mag.adc.y,   _model.state.mag.adc.z
     );
+    _model.state.mag.updated = false;
   }
   else
   {

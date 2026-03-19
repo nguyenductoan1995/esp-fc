@@ -66,6 +66,8 @@ int MagSensor::filter()
 
   calibrate();
 
+  _model.state.mag.updated = true;
+
   return 1;
 }
 

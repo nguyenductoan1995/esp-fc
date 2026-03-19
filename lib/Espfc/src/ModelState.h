@@ -218,6 +218,7 @@ struct MagState
   VectorFloat adc;
   Utils::Filter filter[3];
   Utils::Timer timer;
+  bool updated;
 
   int calibrationSamples;
   int calibrationState;
