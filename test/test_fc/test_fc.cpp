@@ -4,14 +4,20 @@
 #include "Model.h"
 #include "Control/Controller.h"
 #include "Control/Actuator.h"
+#include "Control/Altitude.hpp"
+#include "Control/GpsNavigation.hpp"
 #include "Output/Mixer.h"
 #include <Gps.hpp>
+#include <cmath>
 
 using namespace fakeit;
 using namespace Espfc;
 using Espfc::Control::Rates;
 using Espfc::Control::Controller;
 using Espfc::Control::Actuator;
+using Espfc::Control::Altitude;
+using Espfc::Control::gpsDistance;
+using Espfc::Control::gpsBearing;
 using Espfc::Utils::Timer;
 
 /*void setUp(void)
@@ -630,6 +636,423 @@ void test_mixer_output_limit_servo()
   TEST_ASSERT_FLOAT_WITHIN(0.001f,  0.8f, mixer.limitOutput( 1.0f, servo, 80));
 }
 
+// =============================================================================
+// GPS Navigation tests
+// =============================================================================
+
+static int32_t deg2gps(float deg) { return (int32_t)(deg * 1e7f); }
+static float   rad2deg(float rad) { return rad * 180.f / (float)M_PI; }
+
+void test_gps_distance_same_point()
+{
+  int32_t lat = deg2gps(10.f), lon = deg2gps(106.f);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 0.f, gpsDistance(lat, lon, lat, lon));
+}
+
+void test_gps_distance_north_1deg()
+{
+  // 1 degree latitude ≈ 111195 m
+  TEST_ASSERT_FLOAT_WITHIN(500.f, 111195.f,
+    gpsDistance(deg2gps(0.f), deg2gps(0.f), deg2gps(1.f), deg2gps(0.f)));
+}
+
+void test_gps_distance_east_1deg_equator()
+{
+  // 1 degree longitude at equator ≈ 111195 m
+  TEST_ASSERT_FLOAT_WITHIN(500.f, 111195.f,
+    gpsDistance(deg2gps(0.f), deg2gps(0.f), deg2gps(0.f), deg2gps(1.f)));
+}
+
+void test_gps_distance_100m_north()
+{
+  // ~0.0009 deg ≈ 100 m
+  TEST_ASSERT_FLOAT_WITHIN(5.f, 100.f,
+    gpsDistance(deg2gps(10.f), deg2gps(106.f), deg2gps(10.0009f), deg2gps(106.f)));
+}
+
+void test_gps_distance_symmetric()
+{
+  int32_t lat1 = deg2gps(21.0278f), lon1 = deg2gps(105.8342f);
+  int32_t lat2 = deg2gps(10.8231f), lon2 = deg2gps(106.6297f);
+  float d1 = gpsDistance(lat1, lon1, lat2, lon2);
+  float d2 = gpsDistance(lat2, lon2, lat1, lon1);
+  TEST_ASSERT_FLOAT_WITHIN(1.f, d1, d2);
+}
+
+void test_gps_bearing_due_north()
+{
+  float b = rad2deg(gpsBearing(deg2gps(10.f), deg2gps(106.f), deg2gps(11.f), deg2gps(106.f)));
+  TEST_ASSERT_FLOAT_WITHIN(1.f, 0.f, b);
+}
+
+void test_gps_bearing_due_south()
+{
+  float b = rad2deg(gpsBearing(deg2gps(10.f), deg2gps(106.f), deg2gps(9.f), deg2gps(106.f)));
+  TEST_ASSERT_FLOAT_WITHIN(1.f, 180.f, fabsf(b));
+}
+
+void test_gps_bearing_due_east()
+{
+  float b = rad2deg(gpsBearing(deg2gps(0.f), deg2gps(0.f), deg2gps(0.f), deg2gps(1.f)));
+  TEST_ASSERT_FLOAT_WITHIN(1.f, 90.f, b);
+}
+
+void test_gps_bearing_due_west()
+{
+  float b = rad2deg(gpsBearing(deg2gps(0.f), deg2gps(0.f), deg2gps(0.f), deg2gps(-1.f)));
+  TEST_ASSERT_FLOAT_WITHIN(1.f, -90.f, b);
+}
+
+void test_gps_set_home_requires_fix()
+{
+  Model model;
+  model.config.gps.minSats = 6;
+  model.state.gps.fix      = false;
+  model.state.gps.numSats  = 8;
+  model.setGpsHome();
+  TEST_ASSERT_FALSE(model.state.gps.homeSet);
+}
+
+void test_gps_set_home_requires_min_sats()
+{
+  Model model;
+  model.config.gps.minSats = 6;
+  model.state.gps.fix      = true;
+  model.state.gps.numSats  = 4;
+  model.setGpsHome();
+  TEST_ASSERT_FALSE(model.state.gps.homeSet);
+}
+
+void test_gps_set_home_success()
+{
+  Model model;
+  model.config.gps.minSats     = 6;
+  model.config.gps.setHomeOnce = 1;
+  model.state.gps.fix          = true;
+  model.state.gps.numSats      = 8;
+  model.state.gps.location.raw.lat = deg2gps(10.f);
+  model.state.gps.location.raw.lon = deg2gps(106.f);
+  model.setGpsHome();
+  TEST_ASSERT_TRUE(model.state.gps.homeSet);
+  TEST_ASSERT_EQUAL_INT32(deg2gps(10.f),  model.state.gps.location.home.lat);
+  TEST_ASSERT_EQUAL_INT32(deg2gps(106.f), model.state.gps.location.home.lon);
+}
+
+void test_gps_set_home_once_flag()
+{
+  Model model;
+  model.config.gps.minSats     = 6;
+  model.config.gps.setHomeOnce = 1;
+  model.state.gps.fix          = true;
+  model.state.gps.numSats      = 8;
+  model.state.gps.location.raw.lat = deg2gps(10.f);
+  model.setGpsHome();
+  model.state.gps.location.raw.lat = deg2gps(20.f);
+  model.setGpsHome();
+  // Home should NOT be updated on second call
+  TEST_ASSERT_EQUAL_INT32(deg2gps(10.f), model.state.gps.location.home.lat);
+}
+
+void test_gps_set_home_force()
+{
+  Model model;
+  model.config.gps.minSats = 6;
+  model.state.gps.fix      = false;
+  model.state.gps.numSats  = 2;
+  model.state.gps.location.raw.lat = deg2gps(15.f);
+  model.setGpsHome(true);
+  TEST_ASSERT_TRUE(model.state.gps.homeSet);
+  TEST_ASSERT_EQUAL_INT32(deg2gps(15.f), model.state.gps.location.home.lat);
+}
+
+// =============================================================================
+// Failsafe GPS rescue tests
+// =============================================================================
+
+void test_failsafe_gps_rescue_conditions_met()
+{
+  Model model;
+  model.state.gps.present  = true;
+  model.state.gps.homeSet  = true;
+  model.state.gps.fix      = true;
+  model.state.gps.numSats  = 8;
+  model.config.gps.minSats = 6;
+  model.state.mode.mask   |= (1 << MODE_ARMED);
+
+  const bool gpsReady = model.gpsActive()
+    && model.state.gps.homeSet
+    && model.state.gps.fix
+    && model.state.gps.numSats >= model.config.gps.minSats
+    && !model.isModeActive(MODE_GPS_RESCUE);
+
+  TEST_ASSERT_TRUE(gpsReady);
+}
+
+void test_failsafe_gps_rescue_no_fix()
+{
+  Model model;
+  model.state.gps.present  = true;
+  model.state.gps.homeSet  = true;
+  model.state.gps.fix      = false;
+  model.state.gps.numSats  = 8;
+  model.config.gps.minSats = 6;
+
+  const bool gpsReady = model.gpsActive()
+    && model.state.gps.homeSet
+    && model.state.gps.fix
+    && model.state.gps.numSats >= model.config.gps.minSats;
+
+  TEST_ASSERT_FALSE(gpsReady);
+}
+
+void test_failsafe_gps_rescue_no_home()
+{
+  Model model;
+  model.state.gps.present  = true;
+  model.state.gps.homeSet  = false;
+  model.state.gps.fix      = true;
+  model.state.gps.numSats  = 8;
+  model.config.gps.minSats = 6;
+
+  const bool gpsReady = model.gpsActive()
+    && model.state.gps.homeSet
+    && model.state.gps.fix
+    && model.state.gps.numSats >= model.config.gps.minSats;
+
+  TEST_ASSERT_FALSE(gpsReady);
+}
+
+void test_failsafe_gps_rescue_insufficient_sats()
+{
+  Model model;
+  model.state.gps.present  = true;
+  model.state.gps.homeSet  = true;
+  model.state.gps.fix      = true;
+  model.state.gps.numSats  = 4;
+  model.config.gps.minSats = 6;
+
+  const bool gpsReady = model.gpsActive()
+    && model.state.gps.homeSet
+    && model.state.gps.fix
+    && model.state.gps.numSats >= model.config.gps.minSats;
+
+  TEST_ASSERT_FALSE(gpsReady);
+}
+
+void test_failsafe_gps_rescue_mode_bit_set()
+{
+  Model model;
+  model.state.mode.mask |= (1 << MODE_ARMED);
+  model.state.mode.mask |= (1 << MODE_GPS_RESCUE);
+  TEST_ASSERT_TRUE(model.isModeActive(MODE_GPS_RESCUE));
+  TEST_ASSERT_TRUE(model.isModeActive(MODE_ARMED));
+}
+
+// =============================================================================
+// Mag fusion tests
+// =============================================================================
+
+void test_mag_updated_flag_initially_false()
+{
+  Model model;
+  TEST_ASSERT_FALSE(model.state.mag.updated);
+}
+
+void test_mag_not_active_dev_none()
+{
+  Model model;
+  model.state.mag.present = true;
+  model.config.mag.dev    = MAG_NONE;
+  TEST_ASSERT_FALSE(model.magActive());
+}
+
+void test_mag_not_active_not_present()
+{
+  Model model;
+  model.state.mag.present = false;
+  model.config.mag.dev    = MAG_QMC5883;
+  TEST_ASSERT_FALSE(model.magActive());
+}
+
+void test_mag_active_present_and_configured()
+{
+  Model model;
+  model.state.mag.present = true;
+  model.config.mag.dev    = MAG_QMC5883;
+  TEST_ASSERT_TRUE(model.magActive());
+}
+
+void test_mag_fusion_guard_all_met()
+{
+  Model model;
+  model.state.mag.present          = true;
+  model.config.mag.dev             = MAG_QMC5883;
+  model.state.mag.calibrationValid = true;
+  model.state.mag.updated          = true;
+  const bool use9dof = model.magActive() && model.state.mag.calibrationValid && model.state.mag.updated;
+  TEST_ASSERT_TRUE(use9dof);
+}
+
+void test_mag_fusion_guard_no_calibration()
+{
+  Model model;
+  model.state.mag.present          = true;
+  model.config.mag.dev             = MAG_QMC5883;
+  model.state.mag.calibrationValid = false;
+  model.state.mag.updated          = true;
+  const bool use9dof = model.magActive() && model.state.mag.calibrationValid && model.state.mag.updated;
+  TEST_ASSERT_FALSE(use9dof);
+}
+
+void test_mag_fusion_guard_no_new_data()
+{
+  Model model;
+  model.state.mag.present          = true;
+  model.config.mag.dev             = MAG_QMC5883;
+  model.state.mag.calibrationValid = true;
+  model.state.mag.updated          = false;
+  const bool use9dof = model.magActive() && model.state.mag.calibrationValid && model.state.mag.updated;
+  TEST_ASSERT_FALSE(use9dof);
+}
+
+void test_mag_updated_consumed_after_fusion()
+{
+  Model model;
+  model.state.mag.updated = true;
+  if(model.state.mag.updated) model.state.mag.updated = false;
+  TEST_ASSERT_FALSE(model.state.mag.updated);
+}
+
+void test_mag_calibration_offset_applied()
+{
+  VectorFloat raw(100.f, -50.f, 200.f);
+  VectorFloat offset(10.f, -10.f, 20.f);
+  VectorFloat scale(1.f, 1.f, 1.f);
+  VectorFloat adc = raw;
+  adc -= offset;
+  adc *= scale;
+  TEST_ASSERT_FLOAT_WITHIN(0.01f,  90.f, adc[0]);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, -40.f, adc[1]);
+  TEST_ASSERT_FLOAT_WITHIN(0.01f, 180.f, adc[2]);
+}
+
+// =============================================================================
+// Altitude complementary filter tests
+// =============================================================================
+
+static void setupAltModel(Model& model, float baroHeight, float baroVario, float accelZ, float cosTheta)
+{
+  model.state.baro.present        = true;
+  model.config.baro.dev           = BARO_BMP280;
+  model.state.baro.rate           = 25;
+  model.state.baro.altitudeGround = baroHeight;
+  model.state.baro.vario          = baroVario;
+  model.state.accel.present       = true;
+  model.state.accel.timer.rate    = 500;
+  model.state.accel.timer.intervalf = 1.f / 500.f;
+  model.state.attitude.quaternion = Quaternion(); // identity
+  model.state.attitude.cosTheta   = cosTheta;
+  model.state.accel.adc           = VectorFloat(0.f, 0.f, accelZ);
+}
+
+static void runAltTicks(Altitude& alt, int n)
+{
+  for(int i = 0; i < n; i++) alt.update();
+}
+
+void test_altitude_init_zero()
+{
+  Model model;
+  setupAltModel(model, 0.f, 0.f, 1.f, 1.f);
+  Altitude alt(model);
+  alt.begin();
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.f, model.state.altitude.height);
+  TEST_ASSERT_FLOAT_WITHIN(0.001f, 0.f, model.state.altitude.vario);
+}
+
+void test_altitude_converges_to_baro()
+{
+  Model model;
+  setupAltModel(model, 10.f, 0.f, 1.f, 1.f);
+  Altitude alt(model);
+  alt.begin();
+  runAltTicks(alt, 500);
+  TEST_ASSERT_FLOAT_WITHIN(0.5f, 10.f, model.state.altitude.height);
+}
+
+void test_altitude_vario_zero_at_hover()
+{
+  Model model;
+  setupAltModel(model, 5.f, 0.f, 1.f, 1.f);
+  Altitude alt(model);
+  alt.begin();
+  runAltTicks(alt, 500);
+  TEST_ASSERT_FLOAT_WITHIN(0.1f, 0.f, model.state.altitude.vario);
+}
+
+void test_altitude_accel_climb_detected()
+{
+  Model model;
+  setupAltModel(model, 0.f, 1.f, 1.1f, 1.f);
+  Altitude alt(model);
+  alt.begin();
+  runAltTicks(alt, 50);
+  TEST_ASSERT_TRUE(model.state.altitude.vario > 0.f);
+}
+
+void test_altitude_accel_descent_detected()
+{
+  Model model;
+  setupAltModel(model, 0.f, -1.f, 0.9f, 1.f);
+  Altitude alt(model);
+  alt.begin();
+  runAltTicks(alt, 50);
+  TEST_ASSERT_TRUE(model.state.altitude.vario < 0.f);
+}
+
+void test_altitude_tilt_suppresses_accel()
+{
+  // high tilt (cosTheta=0.4) → accel contribution suppressed → height converges to baro
+  Model model;
+  setupAltModel(model, 10.f, 0.f, 1.5f, 0.4f);
+  Altitude alt(model);
+  alt.begin();
+  runAltTicks(alt, 500);
+  TEST_ASSERT_FLOAT_WITHIN(1.f, 10.f, model.state.altitude.height);
+}
+
+void test_altitude_vario_clamped_max()
+{
+  Model model;
+  setupAltModel(model, 0.f, 10.f, 5.f, 1.f);
+  Altitude alt(model);
+  alt.begin();
+  runAltTicks(alt, 200);
+  TEST_ASSERT_TRUE(model.state.altitude.vario <= 10.f);
+}
+
+void test_altitude_vario_clamped_min()
+{
+  Model model;
+  setupAltModel(model, 0.f, -10.f, -3.f, 1.f);
+  Altitude alt(model);
+  alt.begin();
+  runAltTicks(alt, 200);
+  TEST_ASSERT_TRUE(model.state.altitude.vario >= -10.f);
+}
+
+void test_altitude_no_baro_stays_near_zero()
+{
+  Model model;
+  setupAltModel(model, 0.f, 0.f, 1.f, 1.f);
+  model.config.baro.dev    = BARO_NONE;
+  model.state.baro.present = false;
+  Altitude alt(model);
+  alt.begin();
+  runAltTicks(alt, 100);
+  TEST_ASSERT_FLOAT_WITHIN(0.5f, 0.f, model.state.altitude.height);
+}
+
 int main(int argc, char **argv)
 {
   UNITY_BEGIN();
@@ -658,6 +1081,51 @@ int main(int argc, char **argv)
   RUN_TEST(test_mixer_throttle_limit_clip);
   RUN_TEST(test_mixer_output_limit_motor);
   RUN_TEST(test_mixer_output_limit_servo);
+
+  // GPS navigation
+  RUN_TEST(test_gps_distance_same_point);
+  RUN_TEST(test_gps_distance_north_1deg);
+  RUN_TEST(test_gps_distance_east_1deg_equator);
+  RUN_TEST(test_gps_distance_100m_north);
+  RUN_TEST(test_gps_distance_symmetric);
+  RUN_TEST(test_gps_bearing_due_north);
+  RUN_TEST(test_gps_bearing_due_south);
+  RUN_TEST(test_gps_bearing_due_east);
+  RUN_TEST(test_gps_bearing_due_west);
+  RUN_TEST(test_gps_set_home_requires_fix);
+  RUN_TEST(test_gps_set_home_requires_min_sats);
+  RUN_TEST(test_gps_set_home_success);
+  RUN_TEST(test_gps_set_home_once_flag);
+  RUN_TEST(test_gps_set_home_force);
+
+  // Failsafe GPS rescue
+  RUN_TEST(test_failsafe_gps_rescue_conditions_met);
+  RUN_TEST(test_failsafe_gps_rescue_no_fix);
+  RUN_TEST(test_failsafe_gps_rescue_no_home);
+  RUN_TEST(test_failsafe_gps_rescue_insufficient_sats);
+  RUN_TEST(test_failsafe_gps_rescue_mode_bit_set);
+
+  // Mag fusion
+  RUN_TEST(test_mag_updated_flag_initially_false);
+  RUN_TEST(test_mag_not_active_dev_none);
+  RUN_TEST(test_mag_not_active_not_present);
+  RUN_TEST(test_mag_active_present_and_configured);
+  RUN_TEST(test_mag_fusion_guard_all_met);
+  RUN_TEST(test_mag_fusion_guard_no_calibration);
+  RUN_TEST(test_mag_fusion_guard_no_new_data);
+  RUN_TEST(test_mag_updated_consumed_after_fusion);
+  RUN_TEST(test_mag_calibration_offset_applied);
+
+  // Altitude complementary filter
+  RUN_TEST(test_altitude_init_zero);
+  RUN_TEST(test_altitude_converges_to_baro);
+  RUN_TEST(test_altitude_vario_zero_at_hover);
+  RUN_TEST(test_altitude_accel_climb_detected);
+  RUN_TEST(test_altitude_accel_descent_detected);
+  RUN_TEST(test_altitude_tilt_suppresses_accel);
+  RUN_TEST(test_altitude_vario_clamped_max);
+  RUN_TEST(test_altitude_vario_clamped_min);
+  RUN_TEST(test_altitude_no_baro_stays_near_zero);
 
   return UNITY_END();
 }
