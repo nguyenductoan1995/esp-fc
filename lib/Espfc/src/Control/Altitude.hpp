@@ -71,7 +71,7 @@ public:
     // Rotate to world frame using current attitude quaternion.
     // Subtract 1g (gravity) to get linear vertical acceleration.
     const VectorFloat accelWorld = _model.state.accel.adc.getRotated(_model.state.attitude.quaternion);
-    const float accelZ = _accelZFilter.update((accelWorld.z - 1.0f) * GRAVITY_MSS); // m/s²
+    const float accelZ = _accelZFilter.update((accelWorld.z - 1.0f) * ACCEL_G); // m/s²
 
     // Tilt compensation: when leaned, vertical thrust component is reduced.
     // cosTheta = cos(lean angle) is already computed in Fusion.
@@ -117,7 +117,6 @@ private:
   // Lower  BARO_GAIN_HEIGHT = more accel trust (smoother but slower to correct)
   static constexpr float BARO_GAIN_HEIGHT = 0.02f;  // height correction per update
   static constexpr float BARO_GAIN_VARIO  = 0.04f;  // velocity correction per update
-  static constexpr float GRAVITY_MSS      = 9.80665f;
   static constexpr float MAX_VARIO_MS     = 10.0f;  // m/s max vertical speed clamp
 
   Model& _model;

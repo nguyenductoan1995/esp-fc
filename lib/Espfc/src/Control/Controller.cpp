@@ -126,8 +126,8 @@ void FAST_CODE_ATTR Controller::outerLoop()
   _gpsNav.update();
 
   // Roll/Pitch rates control
-  const bool gpsActive = _model.isModeActive(MODE_POSHOLD) || _model.isModeActive(MODE_GPS_RESCUE);
-  if(gpsActive)
+  const bool gpsControlActive = _model.isModeActive(MODE_POSHOLD) || _model.isModeActive(MODE_GPS_RESCUE);
+  if(gpsControlActive)
   {
     // Position hold / RTH: use angle setpoints from GPS navigation controller
     for(size_t i = 0; i < AXIS_COUNT_RP; i++)
@@ -158,7 +158,7 @@ void FAST_CODE_ATTR Controller::outerLoop()
   _model.state.setpoint.rate[AXIS_YAW] = calculateSetpointRate(AXIS_YAW, _model.state.input.ch[AXIS_YAW]);
 
   // thrust control
-  if(_model.isModeActive(MODE_ALTHOLD) || gpsActive)
+  if(_model.isModeActive(MODE_ALTHOLD) || gpsControlActive)
   {
     _model.state.setpoint.rate[AXIS_THRUST] = calcualteAltHoldSetpoint();
   }

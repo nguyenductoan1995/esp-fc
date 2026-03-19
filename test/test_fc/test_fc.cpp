@@ -16,9 +16,19 @@ using Espfc::Control::Rates;
 using Espfc::Control::Controller;
 using Espfc::Control::Actuator;
 using Espfc::Control::Altitude;
-using Espfc::Control::gpsDistance;
-using Espfc::Control::gpsBearing;
 using Espfc::Utils::Timer;
+
+// Thin wrappers so test code reads naturally after gpsDistanceBearing() refactor
+static float gpsDistance(int32_t lat1, int32_t lon1, int32_t lat2, int32_t lon2) {
+  float dist, bearing;
+  Espfc::Control::gpsDistanceBearing(lat1, lon1, lat2, lon2, dist, bearing);
+  return dist;
+}
+static float gpsBearing(int32_t lat1, int32_t lon1, int32_t lat2, int32_t lon2) {
+  float dist, bearing;
+  Espfc::Control::gpsDistanceBearing(lat1, lon1, lat2, lon2, dist, bearing);
+  return bearing;
+}
 
 /*void setUp(void)
 {
