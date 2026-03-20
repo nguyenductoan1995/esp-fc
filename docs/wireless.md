@@ -1,46 +1,46 @@
-# ESP-FC Wireless functions
+# Chức Năng Không Dây ESP-FC
 
-Espressif modules have a built-in WiFi module that can be used for configuration and control.
+Các module Espressif có WiFi tích hợp, có thể dùng để cấu hình và điều khiển.
 
-## WiFi configuration
+## Cấu Hình WiFi
 
 > [!NOTE]
-> To be able to configure device using WiFi connection, you need to enable `SOFTSERIAL` function. WiFi function can only be used to configure device. Whilst WiFi is active, it is not possible to ARM controller and reboot is required.
+> Để cấu hình thiết bị qua kết nối WiFi, cần bật chức năng `SOFTSERIAL`. WiFi chỉ dùng để cấu hình thiết bị. Trong khi WiFi đang hoạt động, không thể ARM controller — cần reboot.
 
 ![Enable WiFi](/docs/images/espfc_wifi_ap_enable.png)
 
-WiFi will start its own Access-Point if board will not detect receiver signal for at least 30 seconds (stay in failsafe mode since boot). Name of this AP is `ESP-FC` and it is open network. If you connect to this AP, then choose `Manual Selection` and type `tcp://192.168.4.1:1111` 
+WiFi sẽ tự động tạo Access Point nếu board không nhận được tín hiệu receiver trong ít nhất 30 giây (ở trạng thái failsafe từ khi khởi động). Tên AP là `ESP-FC` và là mạng mở. Sau khi kết nối AP này, chọn `Manual Selection` và nhập `tcp://192.168.4.1:1111`.
 
 ![Connect to ESP-FC AP](/docs/images/espfc_wifi_ap_connect.png)
 
-You can also automatically connect ESP-FC to your home network. To achive that, go to the CLI tab, and enter your network name and secret.
+Có thể cấu hình ESP-FC tự động kết nối vào mạng nhà. Trong tab CLI, nhập tên mạng và mật khẩu:
 ```
 set wifi_ssid MY-HOME-NET
 set wifi_pass MY-HOME-PASS
 ```
 > [!NOTE]
-> Network name and pass must not contains spaces.
+> Tên mạng và mật khẩu không được chứa dấu cách.
 
-then you can check status of connection by typing `wifi` in CLI tab.
+Kiểm tra trạng thái kết nối bằng lệnh `wifi` trong tab CLI:
 ```
-wifi 
+wifi
 ST IP4: tcp://0.0.0.0:1111
 ST MAC: 30:30:F9:6E:10:74
 AP IP4: tcp://192.168.4.1:1111
 AP MAC: 32:30:F9:6E:10:74
 ```
-In this mode you need to discover IP address granted by DHCP. In line `ST IP4` is the address that you need to use in configurator. If there is `0.0.0.0`, that means that FC was not able to connect to home network.
+Trong chế độ này, cần tìm địa chỉ IP được DHCP cấp. Dòng `ST IP4` là địa chỉ cần dùng trong configurator. Nếu hiển thị `0.0.0.0` nghĩa là FC không kết nối được với mạng nhà.
 
-## ESP-NOW control
+## Điều Khiển ESP-NOW
 
-ESP-NOW is a proprietary wireless communication protocol defined by Espressif, which enables the direct, quick and low-power control of smart devices, without the need of a router. 
+ESP-NOW là giao thức truyền thông không dây độc quyền của Espressif — cho phép điều khiển trực tiếp, nhanh và tiết kiệm điện mà không cần router.
 
-As there are no real transmitters usng this protocol on the market, you have to build your own transmitting module first. If you alredy own RC transmitter with JR bay, you can use another ESP32 module. In this case follow [espnow-rclink-tx](https://github.com/rtlopez/espnow-rclink-tx) instructions.
+Vì hiện tại không có transmitter thương mại nào dùng giao thức này, cần tự lắp module phát. Nếu đã có RC transmitter với khe JR bay, có thể dùng thêm một module ESP32. Trong trường hợp đó, làm theo hướng dẫn tại [espnow-rclink-tx](https://github.com/rtlopez/espnow-rclink-tx).
 
-In ESP-FC you have to choose `SPI Rx (e.g. built-in Rx)` as Receiver mode in Receiver tab.
+Trong ESP-FC, chọn `SPI Rx (e.g. built-in Rx)` làm Receiver mode trong tab Receiver.
 
-![ESP-FC ESP-NOW Reciever](/docs/images/espfc_receiver.png)
+![ESP-FC ESP-NOW Receiver](/docs/images/espfc_receiver.png)
 
-Transmitter and receiver binds automatically after power up, you don't need to do anything. Recomended startup procedure is:
-1. turn on transmitter first
-2. next power up receiver/flight controller
+Transmitter và receiver tự động bắt cặp sau khi khởi động — không cần thao tác thêm. Quy trình khởi động khuyến nghị:
+1. Bật transmitter trước,
+2. Sau đó cấp nguồn cho receiver/flight controller.

@@ -13,6 +13,20 @@
 
 namespace Espfc {
 
+/**
+ * @brief Trung tâm trạng thái và cấu hình của toàn bộ flight controller
+ *
+ * `Model` là struct dữ liệu chia sẻ duy nhất, được truyền bằng tham chiếu vào
+ * mọi subsystem. Gồm hai phần:
+ *   - `config` (`ModelConfig`): cấu hình lưu vào EEPROM, đọc/ghi qua `load()`/`save()`
+ *   - `state` (`ModelState`): trạng thái runtime — gyro, accel, PID, output, mode masks
+ *
+ * Trên ESP32 dual-core, `state` được truy cập từ cả hai core. Các trường nhạy cảm
+ * (ví dụ: `appQueue`) sử dụng cơ chế đồng bộ nội bộ. Tránh thêm global state ngoài class này.
+ *
+ * @note `state` KHÔNG được reset khi khởi động trên board thật (tránh WDT reset).
+ *       Chỉ reset trong `UNIT_TEST`.
+ */
 class Model
 {
   public:
@@ -21,6 +35,12 @@ class Model
       initialize();
     }
 
+    /**
+     * @brief Khởi tạo `config` về giá trị mặc định
+     *
+     * Reset `ModelConfig` về default. Trong `UNIT_TEST` cũng reset `ModelState`.
+     * Trên board thật, `state` KHÔNG được reset ở đây (tránh WDT reset do zero-fill bộ nhớ lớn).
+     */
     void initialize()
     {
       config = ModelConfig();
@@ -30,38 +50,84 @@ class Model
       //config.brobot();
     }
 
+    /**
+     * @brief Kiểm tra một flight mode có đang active không
+     *
+     * @param mode Flight mode cần kiểm tra (ví dụ: MODE_ARMED, MODE_ANGLE, MODE_ALTHOLD)
+     * @return true nếu mode đang được bật
+     */
     bool isModeActive(FlightMode mode) const
     {
       return state.mode.mask & (1 << mode);
     }
 
+    /**
+     * @brief Kiểm tra một flight mode có thay đổi trạng thái so với chu kỳ trước không
+     *
+     * So sánh `mask` hiện tại với `maskPrev` để phát hiện transition on/off.
+     *
+     * @param mode Flight mode cần kiểm tra
+     * @return true nếu trạng thái mode đã thay đổi trong chu kỳ hiện tại
+     */
     bool hasChanged(FlightMode mode) const
     {
       return (state.mode.mask & (1 << mode)) != (state.mode.maskPrev & (1 << mode));
     }
 
+    /**
+     * @brief Tắt một flight mode và lưu trạng thái trước đó vào maskPrev
+     *
+     * @param mode Flight mode cần tắt
+     */
     void clearMode(FlightMode mode)
     {
       state.mode.maskPrev |= state.mode.mask & (1 << mode);
       state.mode.mask &= ~(1 << mode);
     }
 
+    /**
+     * @brief Cập nhật toàn bộ flight mode mask từ RC input
+     *
+     * Lưu mask cũ vào `maskPrev` trước khi ghi mask mới, phục vụ phát hiện transition.
+     *
+     * @param mask Bitmask flight mode mới (tính từ RC switches)
+     */
     void updateModes(uint32_t mask)
     {
       state.mode.maskPrev = state.mode.mask;
       state.mode.mask = mask;
     }
 
+    /**
+     * @brief Kiểm tra trạng thái switch vật lý của một flight mode (chưa qua logic armed)
+     *
+     * @param mode Flight mode cần kiểm tra
+     * @return true nếu switch RC tương ứng đang ở vị trí bật
+     */
     bool isSwitchActive(FlightMode mode) const
     {
       return state.mode.maskSwitch & (1 << mode);
     }
 
+    /**
+     * @brief Cập nhật trạng thái switch RC (maskSwitch) từ RC input processor
+     *
+     * @param mask Bitmask switch RC mới
+     */
     void updateSwitchActive(uint32_t mask)
     {
       state.mode.maskSwitch = mask;
     }
 
+    /**
+     * @brief Disarm cưỡng bức và ghi lý do vào log
+     *
+     * Tắt MODE_ARMED và MODE_AIRMODE, ghi `disarmReason`, gửi EVENT_DISARM
+     * vào `appQueue` để pidTask xử lý motor stop.
+     *
+     * @param r Lý do disarm (failsafe, throttle thấp, RC mất tín hiệu, v.v.)
+     * @warning Gọi hàm này từ bất kỳ task nào đều an toàn — appQueue là thread-safe.
+     */
     void disarm(DisarmReason r)
     {
       state.mode.disarmReason = r;
@@ -70,57 +136,117 @@ class Model
       state.appQueue.send(Event(EVENT_DISARM));
     }
 
+    /**
+     * @brief Kiểm tra một feature có được bật trong cấu hình không
+     *
+     * @param feature Feature cần kiểm tra (ví dụ: FEATURE_SOFTSERIAL, FEATURE_TELEMETRY)
+     * @return true nếu feature đang được bật
+     */
     bool isFeatureActive(Feature feature) const
     {
       return config.featureMask & feature;
     }
 
+    /**
+     * @brief Kiểm tra Airmode có đang active không
+     *
+     * @return true nếu MODE_AIRMODE đang bật
+     */
     bool isAirModeActive() const
     {
       return isModeActive(MODE_AIRMODE);// || isFeatureActive(FEATURE_AIRMODE);
     }
 
+    /**
+     * @brief Kiểm tra throttle có ở mức thấp dưới ngưỡng minCheck không
+     *
+     * Dùng để quyết định có reset I-term (khi không ở Airmode) hay không.
+     *
+     * @return true nếu tín hiệu throttle (µs) nhỏ hơn `config.input.minCheck`
+     */
     bool isThrottleLow() const
     {
       return state.input.us[AXIS_THRUST] < config.input.minCheck;
     }
 
+    /**
+     * @brief Kiểm tra blackbox có được cấu hình và bật hay không
+     *
+     * @return true nếu thiết bị blackbox là serial hoặc flash, và pDenom > 0
+     */
     bool blackboxEnabled() const
     {
       // serial or flash
       return (config.blackbox.dev == BLACKBOX_DEV_SERIAL || config.blackbox.dev == BLACKBOX_DEV_FLASH) && config.blackbox.pDenom > 0;
     }
 
+    /**
+     * @brief Kiểm tra gyro có sẵn sàng hoạt động không
+     *
+     * @return true nếu gyro được phát hiện và không bị disable trong config
+     * @note Hàm này có thể được gọi trong gyroTask (IRAM context)
+     */
     bool gyroActive() const /* IRAM_ATTR */
     {
       return state.gyro.present && config.gyro.dev != GYRO_NONE;
     }
 
+    /**
+     * @brief Kiểm tra GPS có đang hoạt động không
+     *
+     * @return true nếu GPS đã được phát hiện
+     */
     bool gpsActive() const /* IRAM_ATTR */
     {
       return state.gps.present;
     }
 
+    /**
+     * @brief Kiểm tra accelerometer có đang hoạt động không
+     *
+     * @return true nếu accel được phát hiện và không bị disable trong config
+     */
     bool accelActive() const
     {
       return state.accel.present && config.accel.dev != GYRO_NONE;
     }
 
+    /**
+     * @brief Kiểm tra magnetometer có đang hoạt động không
+     *
+     * @return true nếu mag được phát hiện và không bị disable trong config
+     */
     bool magActive() const
     {
       return state.mag.present && config.mag.dev != MAG_NONE;
     }
 
+    /**
+     * @brief Kiểm tra barometer có đang hoạt động không
+     *
+     * @return true nếu baro được phát hiện và không bị disable trong config
+     */
     bool baroActive() const
     {
       return state.baro.present && config.baro.dev != BARO_NONE;
     }
 
+    /**
+     * @brief Kiểm tra có cảm biến nào đang trong quá trình hiệu chỉnh không
+     *
+     * @return true nếu gyro, accel, hoặc mag đang ở trạng thái calibration (không phải IDLE)
+     */
     bool calibrationActive() const
     {
       return state.accel.calibrationState != CALIBRATION_IDLE || state.gyro.calibrationState != CALIBRATION_IDLE || state.mag.calibrationState != CALIBRATION_IDLE;
     }
 
+    /**
+     * @brief Bắt đầu quá trình hiệu chỉnh gyro (và accel nếu có)
+     *
+     * Đặt `calibrationState = CALIBRATION_START` cho gyro và accel.
+     * Quá trình hiệu chỉnh diễn ra trong `GyroSensor::calibrate()` qua nhiều chu kỳ.
+     */
     void calibrateGyro()
     {
       state.gyro.calibrationState = CALIBRATION_START;
@@ -156,6 +282,14 @@ class Model
       }
     }
 
+    /**
+     * @brief Kiểm tra arming có bị chặn bởi bất kỳ flag nào không
+     *
+     * @return true nếu `armingDisabledFlags != 0` (không thể arm)
+     * @warning Nếu build với `-DESPFC_DEV_PRESET_UNSAFE_ARMING`, luôn trả về false —
+     *          CHỈ dùng cho dev/debug, KHÔNG dùng trong firmware thực tế.
+     * @note Có thể được gọi trong gyroTask (IRAM context)
+     */
     bool armingDisabled() const /* IRAM_ATTR */
     {
 #if defined(ESPFC_DEV_PRESET_UNSAFE_ARMING)
@@ -166,17 +300,37 @@ class Model
 #endif
     }
 
+    /**
+     * @brief Bật hoặc tắt một arming disabled flag
+     *
+     * @param flag Flag cần thay đổi (ví dụ: ARMING_DISABLED_THROTTLE, ARMING_DISABLED_NO_GYRO)
+     * @param value true để bật flag (chặn arming), false để tắt
+     */
     void setArmingDisabled(ArmingDisabledFlags flag, bool value)
     {
       if(value) state.mode.armingDisabledFlags |= flag;
       else state.mode.armingDisabledFlags &= ~flag;
     }
 
+    /**
+     * @brief Kiểm tra một arming disabled flag cụ thể có đang bật không
+     *
+     * @param flag Flag cần kiểm tra
+     * @return true nếu flag đang bật (arming bị chặn bởi lý do này)
+     */
     bool getArmingDisabled(ArmingDisabledFlags flag)
     {
       return state.mode.armingDisabledFlags & flag;
     }
 
+    /**
+     * @brief Thiết lập trạng thái output saturation cho tất cả PID
+     *
+     * Khi output bị bão hòa (motor đã full hoặc zero), thông báo cho
+     * tất cả inner/outer PID để giới hạn I-term tích lũy (anti-windup).
+     *
+     * @param val true nếu output đang bão hòa
+     */
     void setOutputSaturated(bool val)
     {
       state.output.saturated = val;
@@ -187,6 +341,13 @@ class Model
       }
     }
 
+    /**
+     * @brief Kiểm tra có motor nào đang quay không (dựa trên output disarmed)
+     *
+     * Dùng để phát hiện trường hợp motor đang chạy khi chưa arm (safety check).
+     *
+     * @return true nếu bất kỳ motor nào có output khác `minCommand`
+     */
     bool areMotorsRunning() const
     {
       size_t count = state.currentMixer.count;
@@ -199,6 +360,14 @@ class Model
       return false;
     }
 
+    /**
+     * @brief Ghi giá trị debug nếu debug mode khớp
+     *
+     * @param mode Debug mode cần khớp với `config.debug.mode`
+     * @param index Chỉ số slot debug (0–7)
+     * @param value Giá trị cần ghi
+     * @note Không làm gì nếu mode không khớp — an toàn để gọi thường xuyên
+     */
     void inline setDebug(DebugMode mode, size_t index, int16_t value)
     {
       if(index >= 8) return;
@@ -206,6 +375,14 @@ class Model
       state.debug[index] = value;
     }
 
+    /**
+     * @brief Lưu vị trí GPS hiện tại làm điểm home (dùng cho RTH)
+     *
+     * Chỉ lưu khi GPS có fix và đủ số vệ tinh (`config.gps.minSats`).
+     * Nếu `config.gps.setHomeOnce = true`, chỉ lưu lần đầu tiên.
+     *
+     * @param force true để ghi đè điều kiện fix/sats (dùng khi arming thủ công)
+     */
     void setGpsHome(bool force = false)
     {
       if(force || (state.gps.fix && state.gps.numSats >= config.gps.minSats))
@@ -256,6 +433,13 @@ class Model
       return -1;
     }
 
+    /**
+     * @brief Tính giá trị RSSI từ kênh RC được cấu hình
+     *
+     * Ánh xạ giá trị RC [-1.0, 1.0] sang RSSI [0, 1023].
+     *
+     * @return Giá trị RSSI [0, 1023], hoặc 0 nếu kênh không hợp lệ
+     */
     uint16_t getRssi() const
     {
       size_t channel = config.input.rssiChannel;
@@ -264,6 +448,15 @@ class Model
       return Utils::clamp(lrintf(Utils::map(value, -1.0f, 1.0f, 0.0f, 1023.0f)), 0l, 1023l);
     }
 
+    /**
+     * @brief Tải cấu hình từ EEPROM và thực hiện post-processing
+     *
+     * Khởi tạo logger, đọc `ModelConfig` từ EEPROM qua `Utils::Storage`,
+     * rồi gọi `postLoad()` để tính các giá trị derived.
+     *
+     * @return 1 nếu thành công
+     * @note Phải gọi trước `begin()`. Trên `UNIT_TEST`: bỏ qua EEPROM.
+     */
     int load()
     {
       logger.begin();
@@ -277,6 +470,12 @@ class Model
       return 1;
     }
 
+    /**
+     * @brief Lưu cấu hình hiện tại vào EEPROM
+     *
+     * Gọi `preSave()` để chuẩn hóa trước khi ghi, sau đó ghi `config` qua Storage.
+     * @note Trên `UNIT_TEST`: bỏ qua thao tác ghi thực tế.
+     */
     void save()
     {
       preSave();
@@ -286,11 +485,21 @@ class Model
       #endif
     }
 
+    /**
+     * @brief Tải lại và áp dụng cấu hình (gọi `begin()` để reinit subsystems)
+     *
+     * Dùng sau khi cấu hình thay đổi qua MSP/CLI để áp dụng ngay.
+     */
     void reload()
     {
       begin();
     }
 
+    /**
+     * @brief Reset cấu hình về mặc định và khởi động lại
+     *
+     * Gọi `initialize()` (reset config) rồi `reload()` để áp dụng.
+     */
     void reset()
     {
       initialize();
@@ -298,6 +507,15 @@ class Model
       reload();
     }
 
+    /**
+     * @brief Kiểm tra và điều chỉnh cấu hình về giá trị hợp lệ
+     *
+     * Thực hiện sau `load()` và khi có thay đổi cấu hình:
+     *   - Điều chỉnh gyro rate theo bus (SPI nhanh hơn I2C)
+     *   - Tính loopRate = gyroRate / loopSync
+     *   - Điều chỉnh ESC protocol (DSHOT → sync, async tương thích, v.v.)
+     *   - Thiết lập loopSync = 1 nếu là lần đầu tiên (EEPROM trống)
+     */
     void sanitize()
     {
       // for spi gyro allow full speed mode
@@ -426,6 +644,17 @@ class Model
         }
     }
 
+    /**
+     * @brief Khởi tạo toàn bộ timer và filter từ cấu hình đã sanitize
+     *
+     * Gọi `sanitize()` trước, sau đó:
+     *   - Khởi tạo tất cả `Utils::Timer` (gyro, accel, loop, mixer, input, mag, ...)
+     *   - Khởi tạo tất cả `Utils::Filter` (gyro LPF, notch, dynamic notch, RPM filter, ...)
+     *   - Thiết lập board alignment quaternion
+     *
+     * Phải được gọi sau `Hardware::begin()` (cần `state.gyro.dev` để xác định gyro rate).
+     * Có thể gọi lại bằng `reload()` khi cấu hình thay đổi.
+     */
     void begin()
     {
       sanitize();

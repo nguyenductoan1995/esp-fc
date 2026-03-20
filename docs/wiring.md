@@ -1,29 +1,29 @@
-# ESP-FC wiring examples and PIN mapping
+# Ví Dụ Nối Dây và Ánh Xạ PIN ESP-FC
 
-ESP32 MCUs allows to remap pins, so the wiring is not final and you can remap intputs and outputs to your needs. To change pin function go to the CLI and use `get pin` command to check current assignment. For example, to set first output to pin 1 use command 
+ESP32 MCU cho phép remap pin, vì vậy sơ đồ nối dây không cố định và có thể điều chỉnh theo nhu cầu. Để thay đổi chức năng pin, vào CLI và dùng lệnh `get pin` để kiểm tra gán hiện tại. Ví dụ: đặt đầu ra đầu tiên về pin 1:
 
 `set pin_output_0 1`
 
-Tu unmap pin function use -1 as pin number
+Để bỏ gán chức năng pin, dùng -1 làm số pin:
 
 `set pin_output_3 -1`
 
 > [!NOTE]
-> There are still some limitations in remapping. Not all pins can be used with all functions. Some pins are input only, others are strapping pins and may prevent from booting if used incorrectly. please consult MCU documentation for available options. Default layout is proven to work.
+> Vẫn có một số giới hạn khi remap. Không phải tất cả pin đều có thể dùng cho tất cả chức năng. Một số pin chỉ là input, một số là strapping pin và có thể ngăn boot nếu dùng sai. Vui lòng tham khảo tài liệu MCU để biết các tùy chọn khả dụng. Layout mặc định đã được kiểm chứng hoạt động.
 
-## Default I2C pin mapping for gyro modules
+## Ánh Xạ Pin I2C Mặc Định Cho Module Gyro
 
-| Module Pin | CLI Name         | ESP32 | ESP32-S3 |
-|------------|------------------|------:|---------:|
-| SCK/SCL    | `pin_i2c_scl`    | 22    | 10       |
-| SDA/SDI    | `pin_i2c_sda`    | 21    | 9        |
+| Chân Module | Tên CLI          | ESP32 | ESP32-S3 |
+|-------------|------------------|------:|---------:|
+| SCK/SCL     | `pin_i2c_scl`    | 22    | 10       |
+| SDA/SDI     | `pin_i2c_sda`    | 21    | 9        |
 
 > [!NOTE]
-> I2C driver accepts only pins from 1 to 31
+> Driver I2C chỉ chấp nhận pin từ 1 đến 31.
 
-## Default SPI pin mapping gyro modules
+## Ánh Xạ Pin SPI Mặc Định Cho Module Gyro
 
-| Module Pin  | CLI Name         | ESP32 | ESP32-S3 |
+| Chân Module | Tên CLI          | ESP32 | ESP32-S3 |
 |-------------|------------------|------:|---------:|
 | SCK/SCL     | `pin_spi_0_sck`  | 18    | 12       |
 | SDA/SDI     | `pin_spi_0_mosi` | 23    | 11       |
@@ -31,23 +31,23 @@ Tu unmap pin function use -1 as pin number
 | NCS         | `pin_spi_cs_0`   |  5    |  8       |
 | CSB*        | `pin_spi_cs_1`   | 13    |  7       |
 
-**Note:** `CSB` is required for barometer on 10-DOF MPU-9250 modules
+**Lưu ý:** `CSB` cần thiết cho barometer trên các module MPU-9250 10-DOF.
 
 > [!TIP]
-> For better performance preffer SPI
+> Ưu tiên dùng SPI để có hiệu năng tốt hơn.
 
-## Default Servo/Motor output mapping
+## Ánh Xạ Đầu Ra Servo/Motor Mặc Định
 
-| Motor  | CLI name       | ESP32 | ESP32-S3 |
+| Motor  | Tên CLI        | ESP32 | ESP32-S3 |
 |-------:|----------------|------:|---------:|
 | 1      | `pin_output_0` | 27    | 39       |
 | 2      | `pin_output_1` | 25    | 40       |
 | 3      | `pin_output_2` | 4     | 41       |
 | 4      | `pin_output_3` | 12    | 42       |
 
-## Default Uart/Serial pin mapping
+## Ánh Xạ Pin Uart/Serial Mặc Định
 
-| Uart | CLI name          | ESP32 | ESP32-S3 |
+| Uart | Tên CLI           | ESP32 | ESP32-S3 |
 |-----:|-------------------|------:|---------:|
 | RX 1 | `pin_serial_0_rx` |  3    | 44       |
 | TX 1 | `pin_serial_0_tx` |  1    | 43       |
@@ -56,39 +56,39 @@ Tu unmap pin function use -1 as pin number
 | RX 3 | `pin_serial_2_rx` | 16    | 17       |
 | TX 4 | `pin_serial_2_tx` | 17    | 18       |
 
-## Default Analog pin mapping
+## Ánh Xạ Pin Analog Mặc Định
 
-| Uart    | CLI name          | ESP32 | ESP32-S3 |
-|--------:|-------------------|------:|---------:|
-| Voltage | `pin_input_adc_0` |  36   | 1        |
-| Current | `pin_input_adc_1` |  19   | 4        |
+| Chức Năng | Tên CLI           | ESP32 | ESP32-S3 |
+|----------:|-------------------|------:|---------:|
+| Voltage   | `pin_input_adc_0` |  36   | 1        |
+| Current   | `pin_input_adc_1` |  19   | 4        |
 
 > [!NOTE]
-> On ESP32 choose only pins assigned to ADC1 channels
+> Trên ESP32, chỉ dùng các pin thuộc kênh ADC1.
 
-## Default PPM receiver pin mapping
+## Ánh Xạ Pin PPM Receiver Mặc Định
 
-| Uart    | CLI name       | ESP32 | ESP32-S3 |
-|--------:|----------------|------:|---------:|
-| PPM     | `pin_input_rx` |  35   | 6        |
+| Chức Năng | Tên CLI        | ESP32 | ESP32-S3 |
+|----------:|----------------|------:|---------:|
+| PPM       | `pin_input_rx` |  35   | 6        |
 
-## Other pin functions
+## Các Chức Năng Pin Khác
 
-| CLI name            | ESP32 | ESP32-S3 | Comment       |
+| Tên CLI             | ESP32 | ESP32-S3 | Ghi Chú       |
 |---------------------|------:|---------:|---------------|
-| `pin_buzzer`        |  0    | 5        | Status buzzer |
-| `pin_led`           |  26   | -        | Status led    |
+| `pin_buzzer`        |  0    | 5        | Còi trạng thái |
+| `pin_led`           |  26   | -        | LED trạng thái |
 
-## Example ESP32 SPI MPU-6500/MPU-9250 gyro
+## Ví Dụ Nối Dây ESP32 SPI MPU-6500/MPU-9250
 
 ![ESP-FC ESP32 SPI Wiring](./images/esp-fc-esp32_spi_wiring.png)
 
-## Example ESP32 I2C MPU-6050 gyro
+## Ví Dụ Nối Dây ESP32 I2C MPU-6050
 
 ![ESP-FC ESP32 I2C Wiring](./images/esp-fc-esp32_i2c_wiring.png)
 
-## Example ESP8266 I2C MPU-6050 gyro
+## Ví Dụ Nối Dây ESP8266 I2C MPU-6050
 
-ESP8266 has limited ability to remap pins, use `get pin` command to list available options.
+ESP8266 có khả năng remap pin hạn chế — dùng lệnh `get pin` để liệt kê các tùy chọn khả dụng.
 
 ![ESP-FC ESP8266 I2C Wiring](./images/espfc_wemos_d1_mini_wiring.png)

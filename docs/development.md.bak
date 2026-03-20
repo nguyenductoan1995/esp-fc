@@ -1,36 +1,36 @@
-# Phát Triển
+# Development
 
-## Biên Dịch Code
+## Compile code
 
 ```
 pio run -e lolin32
 ```
 
-## Gộp Image
+## Merge image
 
-Bước này chỉ cần thiết khi chuẩn bị image đơn để upload qua giao diện người dùng như Web UI hoặc Firmware flasher cho các chip dựa trên ESP32.
+This step is only required to prepare single image to upload through User Interface, like Web UI or Firmware flasher for ESP32 based chips.
 ```
 python3 ~/.platformio/packages/tool-esptoolpy/esptool.py --chip ESP32 merge_bin -o .pio/build/lolin32/firmware_full.bin --target-offset 0x1000 --flash_mode dio --flash_freq 80m --flash_size 4MB 0x1000 .pio/build/lolin32/bootloader.bin 0x8000 .pio/build/lolin32/partitions.bin 0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin 0x10000 .pio/build/lolin32/firmware.bin
 ```
 
-## Nạp Firmware Lên Thiết Bị
+## Flash device
 
 ```
 pio run -e lolin32 -t upload
 ```
 
-Đối với chip ESP32, lệnh tương đương là:
+For ESP32 chip it expands to:
 ```
 python3 ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32 --port "/dev/ttyUSB0" --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dio --flash_freq 80m --flash_size 4MB 0x1000 .pio/build/lolin32/bootloader.bin 0x8000 .pio/build/lolin32/partitions.bin 0xe000 ~/.platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin 0x10000 .pio/build/lolin32/firmware.bin
 ```
 
-Nạp file đã gộp:
+To flash merged file 
 
 ```
 python3 ~/.platformio/packages/tool-esptoolpy/esptool.py --chip esp32 --port "/dev/ttyUSB0" --baud 921600 --before default_reset --after hard_reset write_flash -z --flash_mode dio --flash_freq 80m --flash_size 4MB 0x1000 .pio/build/lolin32/firmware_full.bin
 ```
 
-## Chạy Unit Test
+## Run unit tests
 
 ```
 pio test -e native
@@ -38,23 +38,23 @@ pio test -e native
 
 ## Docker
 
-Nếu không muốn cài đặt PlatformIO trực tiếp:
+If you don't want to install PlatformIO
 
 ```
 docker-compose run pio <pio command>
 ```
 
-Ví dụ:
+examples
 
 ```
 docker-compose run pio pio run -e lolin32
 docker-compose run pio pio test -e native
 ```
-Lưu ý: để nạp firmware từ trong Docker cần thêm cấu hình, vì mặc định Docker là môi trường cô lập và không truy cập được thiết bị phần cứng.
+Keep in mind, that to be able to flash device, additional effort is required as by default docker is isolated enviroment devices are't accessible.
 
 ## VSCode
 
-Dự án này sử dụng [platformio](https://platformio.org/). Khuyến nghị cài đặt extension PlatformIO cho VSCode.
+This project is based on [platformio](https://platformio.org/), it is recommended to install it as VSCode IDE extension.
 
-1. Nếu chưa có VSCode, tải tại https://code.visualstudio.com/download
-2. Cài đặt extension tại https://platformio.org/install/ide?install=vscode
+1. if you don't have VSCode yet? visit https://code.visualstudio.com/download
+2. then install https://platformio.org/install/ide?install=vscode

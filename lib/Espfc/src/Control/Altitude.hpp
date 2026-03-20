@@ -9,25 +9,42 @@
 namespace Espfc::Control {
 
 /**
- * Altitude estimator using complementary filter: barometer + accelerometer.
+ * @brief Bộ ước lượng độ cao dùng complementary filter: barometer + accelerometer
  *
- * Baro provides slow but absolute height reference.
- * Accel provides fast vertical dynamics (after removing gravity and tilt compensation).
+ * Baro cung cấp tham chiếu độ cao tuyệt đối nhưng chậm và nhiễu.
+ * Accel cung cấp động học thẳng đứng nhanh (sau khi trừ trọng lực và bù góc nghiêng).
  *
- * Two-state complementary filter:
- *   predict:  height += vel * dt
+ * Hai bước lọc bù:
+ *   Predict:  height += vel * dt
  *             vel    += accel_z * dt
- *   correct:  height += k_h * (baro_height - height)
+ *   Correct:  height += k_h * (baro_height - height)
  *             vel    += k_v * (baro_vario  - vel)
  *
- * k_h / k_v control how much baro pulls the estimate — tune smaller for smoother
- * (more accel-driven) or larger for faster baro tracking.
+ * `BARO_GAIN_HEIGHT` / `BARO_GAIN_VARIO` kiểm soát mức độ baro kéo ước lượng:
+ *   - Nhỏ hơn = mượt hơn (accel-driven), phản ứng chậm hơn với thay đổi độ cao
+ *   - Lớn hơn = bám baro nhanh hơn, nhạy hơn với nhiễu baro
+ *
+ * @note Kết quả được ghi vào `_model.state.altitude.height` (m) và `.vario` (m/s)
+ * @note Chạy tại tần số accel timer (thường 1kHz hoặc 500Hz)
  */
 class Altitude
 {
 public:
+  /**
+   * @brief Khởi tạo Altitude estimator với tham chiếu đến model
+   *
+   * @param model Tham chiếu đến shared state model
+   */
   Altitude(Model& model): _model(model) {}
 
+  /**
+   * @brief Khởi tạo trạng thái ban đầu và các bộ lọc
+   *
+   * Reset height/vario về 0, khởi tạo pre-filter cho baro (PT2, 10Hz)
+   * và noise filter cho accel vertical (PT2, 10Hz).
+   *
+   * @return 1 nếu thành công
+   */
   int begin()
   {
     _model.state.altitude.height = 0.0f;
@@ -47,6 +64,16 @@ public:
     return 1;
   }
 
+  /**
+   * @brief Cập nhật ước lượng độ cao và tốc độ thay đổi độ cao
+   *
+   * Thực hiện bước predict từ accel và bước correct từ baro.
+   * Baro chỉ được dùng khi có dữ liệu mới (`baro.rate > 0`).
+   * Vận tốc được giới hạn trong khoảng ±MAX_VARIO_MS để ngăn runaway.
+   *
+   * @return 1 nếu thành công
+   * @note Bù góc nghiêng: accel trust bằng 0 khi góc nghiêng > 60°, bằng 1 khi thẳng đứng
+   */
   int update()
   {
     const float dt = _model.state.accel.timer.intervalf;

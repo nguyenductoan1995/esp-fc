@@ -94,15 +94,19 @@ static const ws2812_pixel_t PIXEL_OFF[] = {{0, 0, 0}};
 namespace Espfc::Connect
 {
 
-// Blink patterns: alternating ON/OFF durations in ms, terminated by 0
-// Even steps (0,2,...) = LED ON, odd steps (1,3,...) = LED OFF
-static int LED_OFF_PATTERN[]    = {0};
-static int LED_SOLID_PATTERN[]  = {100, 0};                            // solid on
-static int LED_SLOW_BLINK[]     = {200, 800, 0};                       // 1Hz, brief flash
-static int LED_FAST_BLINK[]     = {150, 150, 0};                       // 3Hz
-static int LED_DOUBLE_BLINK[]   = {120, 120, 120, 640, 0};             // double-flash 1Hz
-static int LED_RAPID_BLINK[]    = {80, 80, 0};                         // 6Hz
-static int LED_TRIPLE_BLINK[]   = {100, 100, 100, 100, 100, 1500, 0};  // 3 quick + long pause
+/**
+ * Pattern nhấp nháy: mảng thời gian ON/OFF xen kẽ (ms), kết thúc bằng 0.
+ * Chỉ số chẵn (0, 2, ...) = thời gian LED BẬT (ON)
+ * Chỉ số lẻ (1, 3, ...) = thời gian LED TẮT (OFF)
+ * Giá trị 0 = kết thúc mảng, bắt đầu lại từ đầu.
+ */
+static int LED_OFF_PATTERN[]    = {0};                                  ///< LED tắt hoàn toàn
+static int LED_SOLID_PATTERN[]  = {100, 0};                             ///< Sáng liên tục (solid on)
+static int LED_SLOW_BLINK[]     = {200, 800, 0};                        ///< 1Hz, nhấp nháy chậm
+static int LED_FAST_BLINK[]     = {150, 150, 0};                        ///< 3Hz, nhấp nháy nhanh
+static int LED_DOUBLE_BLINK[]   = {120, 120, 120, 640, 0};              ///< Double flash ~1Hz
+static int LED_RAPID_BLINK[]    = {80, 80, 0};                          ///< 6Hz, nhấp nháy rất nhanh
+static int LED_TRIPLE_BLINK[]   = {100, 100, 100, 100, 100, 1500, 0};   ///< 3 nhịp nhanh + nghỉ dài
 
 StatusLed::StatusLed() : _pin(-1), _invert(0), _status(LED_OFF), _next(0), _state(LOW), _step(0), _pattern(LED_OFF_PATTERN), _r(0), _g(0), _b(0) {}
 

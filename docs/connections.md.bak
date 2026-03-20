@@ -1,46 +1,46 @@
-# Sơ Đồ Chân WEMOS D1 MINI
+# WEMOS D1 MINI pinout
 ```
-Pin | Chức Năng        | Chân ESP-8266 | Thiết Bị Ngoài ESPFC
+Pin | Function         | ESP-8266 Pin | ESPFC external device
 ----+------------------+--------------+----------------------------------------------
 TX  | TXD0             | TXD, GPIO1   | (UART0 TX) | CLI | MSP | OSD
 RX  | RXD0             | RXD, GPIO3   | (UART0 RX) | CLI | MSP | OSD
-A0  | Analog In,  3.3V | A0           | Cảm biến điện áp pin hoặc dòng điện, chỉ analog
-D0  | IO               | GPIO16       | LED | BUZZER (khuyến nghị output, không hỗ trợ interrupt)
-D1  | IO, SCL          | GPIO5        | I2C Gyro, Compass, Pressure và các cảm biến khác
-D2  | IO, SDA          | GPIO4        | I2C Gyro, Compass, Pressure và các cảm biến khác
+A0  | Analog In,  3.3V | A0           | Batery voltage or current sensor, analog only
+D0  | IO               | GPIO16       | LED | BUZZER (output recommended, no interrupts)
+D1  | IO, SCL          | GPIO5        | I2C Gyro, Compas, Pressure and other sensors
+D2  | IO, SDA          | GPIO4        | I2C Gyro, Compas, Pressure and other sensors
 D3  | IO, PU           | GPIO0        | PWM 1 (servo/motor)
 D4  | IO, PU, LD, TXD1 | GPIO2        | Blackbox (UART1 TX)
 D5  | IO, SCK          | GPIO14       | PWM 2 (servo/motor)
 D6  | IO, MISO         | GPIO12       | PWM 3 (servo/motor)
 D7  | IO, MOSI         | GPIO13       | PPM RX | PWM
 D8  | IO, SS, PD       | GPIO15       | PWM 4 (servo/motor)
-G   | Ground           | GND          | GND
-5V  | 5V               | N/A          | Nguồn 5V
-3V3 | 3.3V             | 3.3V         | Nguồn 3.3V — cho thiết bị I2C
-RST | Reset            | RST          | Nút reset (tùy chọn)
+G   | Ground           | GND          | Ground
+5V  | 5V               | N/A          | 5V power
+3V3 | 3.3V             | 3.3V         | 3.3V power - to I2C devices
+RST | Reset            | RST          | Reset switch (optional)
 ```
 
-## Chú Giải:
+## Legend:
 ```
-   PU - Pull-up 10k
-   PD - Pull-down 10k
+   PU - 10k pull up
+   PD - 10k pull down
  RXD0 - UART0 hardware RX
  TXD0 - UART0 hardware TX
  TXD1 - UART1 hardware TX
-   LD - LED tích hợp
+   LD - builtin LED
 ```
 
-## Lưu Ý:
+## Notice:
 ```
- A0 - Trên ESP-8266 dải là 1.0V, Wemos có bộ chia 220k:100k cho dải 3.3V; cần thêm bộ chia 22k:4k7 cho pin 4S Lipo
- D0 - Không hỗ trợ interrupt (khuyến nghị chỉ dùng output)
- D3, GPIO0 - Nếu ở mức thấp khi khởi động, board vào chế độ flash (tránh dùng làm input)
- D4, GPIO2 - Phải ở mức cao khi flash (tránh dùng làm input)
- D8, GPIO15 - Phải ở mức thấp khi flash hoặc boot (tránh dùng làm input)
+ A0 - In ESP-8266 is 1.0V range, Wemos has 220k:100k divider for 3.3V range, 22k:4k7 additional divider required for 4S Lipo
+ D0 - No iterrupts (recommended output)
+ D3, GPIO0 - if low at boot, then board enters to flashing mode (avoid using as input)
+ D4, GPIO2 - must be high during flashing (avoid using as input)
+ D8, GPIO15 - must be low during flashing or boot (avoid using as input)
 ```
 https://github.com/esp8266/esp8266-wiki/wiki/Boot-Process#esp-boot-modes
 
-## Sơ Đồ Board Wemos D1 Mini:
+## Wemos D1 mini board layout:
 ```
       /-----------\
    TX |           | RST
@@ -55,9 +55,9 @@ https://github.com/esp8266/esp8266-wiki/wiki/Boot-Process#esp-boot-modes
            USB
 ```
 
-# Sơ Đồ Chân ESP32
+# ESP32 pinout
 ```
-Pin | Tên  | Chức Năng                                  | Thiết Bị Ngoài ESPFC
+Pin | Name | Function                                   | ESPFC external device
 ----+------+--------------------------------------------+----------------------------------------------
  0  |      | PU,ADC2_CH1,CLK_OUT1                       | >  BUTTON
  1  | TXD  | U0TXD,CLK_OUT3                             |    TX0, PROG, MSP
@@ -89,27 +89,27 @@ Pin | Tên  | Chức Năng                                  | Thiết Bị Ngoà
 39  | SVN  | ADC1_CH3                                   | <  ADC_CURRENT
 ```
 
-## Chú Giải
+## Legend
 ```
- '>' chỉ khuyến nghị dùng làm output
- '<' chỉ dùng làm input
- '$' tự do
- '-' không khả dụng
+ '>' recommended output only
+ '<' input only
+ '$' free
+ '-' not available
 ```
-GPIO `0, 2, 5, 12, 15` khuyến nghị dùng làm output vì ảnh hưởng đến quá trình boot.
-GPIO `34-39` chỉ là input theo thiết kế chip.
-GPIO `6-11` dành riêng cho flash tích hợp.
-GPIO `20,24,28,29,30,31` không tồn tại.
+GPIO `0, 2, 5, 12, 15` recommended as output because of boot process impact
+GPIO `34-39` are input-only by chip
+GPIO `6-11` are reserved for integrated flash
+GPIO `20,24,28,29,30,31` does not exist
 
-- GPIO0 — Mức thấp/GND: ROM serial bootloader cho esptool.py; Mức cao/VCC: chế độ thực thi bình thường
-- GPIO2 — Phải để nổi hoặc mức thấp để vào chế độ serial bootloader. Ở chế độ boot bình thường (GPIO0 cao), GPIO2 bị bỏ qua.
-- GPIO12 — Nếu ở mức cao, điện áp flash (VDD_SDIO) là 1.8V thay vì 3.3V mặc định. Có pull-down nội, nên không kết nối = Thấp = 3.3V. Có thể ngăn flash hoặc boot nếu dùng flash 3.3V mà pin này được kéo lên.
-- GPIO15 — Nếu ở mức thấp, tắt thông báo boot từ ROM bootloader. Có pull-up nội, nên không kết nối = Cao = output bình thường.
-- GPIO5 — Cấu hình SDIO Slave trong "Download Boot"
+- GPIO0 - Low/GND	ROM serial bootloader for esptool.py, High/VCC	Normal execution mode
+- GPIO2 - GPIO2 must also be either left unconnected/floating, or driven Low, in order to enter the serial bootloader. In normal boot mode (GPIO0 high), GPIO2 is ignored.
+- GPIO12 - If driven High, flash voltage (VDD_SDIO) is 1.8V not default 3.3V. Has internal pull-down, so unconnected = Low = 3.3V. May prevent flashing and/or booting if 3.3V flash is used and this pin is pulled high, causing the flash to brownout. See the ESP32 datasheet for more details.
+- GPIO15 - If driven Low, silences boot messages printed by the ROM bootloader. Has an internal pull-up, so unconnected = High = normal output.
+- GPIO5 - configures SDIO Slave in "Download Boot"
 
 https://github.com/espressif/esptool/wiki/ESP32-Boot-Mode-Selection
 
-## Sơ Đồ Board ESP32 Mini
+## ESP32 mini board layout
 ```
                   /-------------\
  GND      RST     |             |  TXD (1)    GND
@@ -131,7 +131,7 @@ https://github.com/espressif/esptool/wiki/ESP32-Boot-Mode-Selection
 https://docs.espressif.com/projects/esp-idf/en/latest/esp32s3/api-reference/peripherals/gpio.html
 
 ```
-Pin | Chức Năng            | Thiết Bị Ngoài ESPFC
+Pin | Function             | ESPFC external device
 ----+------+---------------+----------------------------------------------
  0  | Strapping            |
  1  | ADC1_CH0             | ADC_VOLTAGE
@@ -167,7 +167,7 @@ Pin | Chức Năng            | Thiết Bị Ngoài ESPFC
 47  | Strapping            | ?
 48  |                      | ?
 
-DÀNH RIÊNG
+RESERVED
 26  | FLASH                |
 27  | FLASH                |
 28  | FLASH                |
@@ -181,6 +181,6 @@ DÀNH RIÊNG
 36  | FLASH                |
 37  | FLASH                |
 
-KHÔNG KHẢ DỤNG
+UNAVAILABLE
 22, 23, 24, 25
 ```

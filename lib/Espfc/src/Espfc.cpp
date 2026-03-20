@@ -4,6 +4,11 @@
 
 namespace Espfc {
 
+/**
+ * @brief Khởi tạo tất cả subsystem với tham chiếu đến _model
+ *
+ * Mọi subsystem đều nhận `_model` qua constructor — không có global state ngoài Model.
+ */
 Espfc::Espfc():
   _hardware{_model}, _controller{_model}, _telemetry{_model}, _input{_model, _telemetry}, _actuator{_model}, _sensor{_model},
   _mixer{_model}, _blackbox{_model}, _buzzer{_model}, _serial{_model, _telemetry}
