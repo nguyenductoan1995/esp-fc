@@ -262,10 +262,30 @@ void Actuator::updateRescueConfig()
 
 void Actuator::updateLed()
 {
-  if(_model.isModeActive(MODE_ARMED) || _model.state.mode.isLongClickActive())
+  if(_model.state.mode.isLongClickActive()) _model.setGpsHome();
+
+  if(_model.state.failsafe.phase == FC_FAILSAFE_GPS_RESCUE
+     || _model.state.failsafe.phase == FC_FAILSAFE_RX_LOSS_DETECTED
+     || _model.state.failsafe.phase == FC_FAILSAFE_LANDED)
   {
-    if(_model.state.mode.isLongClickActive()) _model.setGpsHome();
-    _model.state.led.setStatus(Connect::LED_ON);
+    _model.state.led.setStatus(Connect::LED_FAILSAFE);
+  }
+  else if(_model.isModeActive(MODE_ARMED))
+  {
+    if(_model.isModeActive(MODE_GPS_RESCUE) || _model.isModeActive(MODE_POSHOLD))
+      _model.state.led.setStatus(Connect::LED_GPS);
+    else if(_model.isModeActive(MODE_ALTHOLD))
+      _model.state.led.setStatus(Connect::LED_ALTHOLD);
+    else
+      _model.state.led.setStatus(Connect::LED_ARMED);
+  }
+  else if(_model.state.gyro.calibrationState != CALIBRATION_IDLE)
+  {
+    _model.state.led.setStatus(Connect::LED_CALIBRATING);
+  }
+  else if(_model.state.battery.warn(_model.config.vbat.cellWarning))
+  {
+    _model.state.led.setStatus(Connect::LED_LOW_BATTERY);
   }
   else if(_model.armingDisabled())
   {

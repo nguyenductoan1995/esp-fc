@@ -87,20 +87,24 @@ static void ws2812_update(const ws2812_pixel_t * pixels)
   i2s_write(I2S_NUM, out_buffer, SIZE_BUFFER, &bytes_written, portMAX_DELAY);
 }
 
-static const ws2812_pixel_t PIXEL_ON[] = {{0x40, 0x40, 0x80}};
 static const ws2812_pixel_t PIXEL_OFF[] = {{0, 0, 0}};
 
-#endif
+#endif // ESPFC_LED_WS2812
 
 namespace Espfc::Connect
 {
 
-static int LED_OFF_PATTERN[] = {0};
-static int LED_OK_PATTERN[] = {100, 900, 0};
-static int LED_ERROR_PATTERN[] = {100, 100, 100, 100, 100, 1500, 0};
-static int LED_ON_PATTERN[] = {100, 0};
+// Blink patterns: alternating ON/OFF durations in ms, terminated by 0
+// Even steps (0,2,...) = LED ON, odd steps (1,3,...) = LED OFF
+static int LED_OFF_PATTERN[]    = {0};
+static int LED_SOLID_PATTERN[]  = {100, 0};                            // solid on
+static int LED_SLOW_BLINK[]     = {200, 800, 0};                       // 1Hz, brief flash
+static int LED_FAST_BLINK[]     = {150, 150, 0};                       // 3Hz
+static int LED_DOUBLE_BLINK[]   = {120, 120, 120, 640, 0};             // double-flash 1Hz
+static int LED_RAPID_BLINK[]    = {80, 80, 0};                         // 6Hz
+static int LED_TRIPLE_BLINK[]   = {100, 100, 100, 100, 100, 1500, 0};  // 3 quick + long pause
 
-StatusLed::StatusLed() : _pin(-1), _invert(0), _status(LED_OFF), _next(0), _state(LOW), _step(0), _pattern(LED_OFF_PATTERN) {}
+StatusLed::StatusLed() : _pin(-1), _invert(0), _status(LED_OFF), _next(0), _state(LOW), _step(0), _pattern(LED_OFF_PATTERN), _r(0), _g(0), _b(0) {}
 
 void StatusLed::begin(int8_t pin, uint8_t type, uint8_t invert)
 {
@@ -132,18 +136,48 @@ void StatusLed::setStatus(LedStatus newStatus, bool force)
   switch (_status)
   {
     case LED_OK:
-      _pattern = LED_OK_PATTERN;
+      _pattern = LED_SLOW_BLINK;
+      _r = 0x00; _g = 0x00; _b = 0x30; // blue
       break;
     case LED_ERROR:
-      _pattern = LED_ERROR_PATTERN;
+      _pattern = LED_TRIPLE_BLINK;
+      _r = 0x60; _g = 0x00; _b = 0x00; // red
+      break;
+    case LED_ARMED:
+      _pattern = LED_SOLID_PATTERN;
+      _state = HIGH;
+      _r = 0x00; _g = 0x40; _b = 0x00; // green
+      break;
+    case LED_ALTHOLD:
+      _pattern = LED_FAST_BLINK;
+      _r = 0x00; _g = 0x30; _b = 0x30; // cyan
+      break;
+    case LED_GPS:
+      _pattern = LED_DOUBLE_BLINK;
+      _r = 0x20; _g = 0x00; _b = 0x40; // purple
+      break;
+    case LED_FAILSAFE:
+      _pattern = LED_RAPID_BLINK;
+      _r = 0x80; _g = 0x00; _b = 0x00; // red bright
+      break;
+    case LED_CALIBRATING:
+      _pattern = LED_SOLID_PATTERN;
+      _state = HIGH;
+      _r = 0x40; _g = 0x40; _b = 0x00; // yellow
+      break;
+    case LED_LOW_BATTERY:
+      _pattern = LED_RAPID_BLINK;
+      _r = 0x60; _g = 0x20; _b = 0x00; // orange
       break;
     case LED_ON:
-      _pattern = LED_ON_PATTERN;
+      _pattern = LED_SOLID_PATTERN;
       _state = HIGH;
+      _r = 0x20; _g = 0x20; _b = 0x40; // blue-white
       break;
     case LED_OFF:
     default:
       _pattern = LED_OFF_PATTERN;
+      _r = 0x00; _g = 0x00; _b = 0x00;
       break;
   }
   _write(_state);
@@ -152,9 +186,9 @@ void StatusLed::setStatus(LedStatus newStatus, bool force)
 void StatusLed::update()
 {
   if(_pin == -1 || !_pattern) return;
-  
+
   uint32_t now = millis();
-  
+
   if(now < _next) return;
 
   if (!_pattern[_step])
@@ -174,7 +208,12 @@ void StatusLed::update()
 void StatusLed::_write(uint8_t val)
 {
 #ifdef ESPFC_LED_WS2812
-  if(_type == LED_STRIP) ws2812_update(val ? PIXEL_ON : PIXEL_OFF);
+  if(_type == LED_STRIP)
+  {
+    // Build pixel from current color (stored as RGB, WS2812 is GRB)
+    ws2812_pixel_t pixel = {_g, _r, _b};
+    ws2812_update(val ? &pixel : PIXEL_OFF);
+  }
   if(_type == LED_SIMPLE) digitalWrite(_pin, val ^ _invert);
 #else
   digitalWrite(_pin, val ^ _invert);

@@ -679,7 +679,11 @@ struct GpsConfig
 struct LedConfig
 {
   uint8_t invert = 0;
-  int8_t type = 0;
+#ifdef ESPFC_LED_WS2812
+  int8_t type = 1; // LED_STRIP
+#else
+  int8_t type = 0; // LED_SIMPLE
+#endif
 };
 
 // persistent data

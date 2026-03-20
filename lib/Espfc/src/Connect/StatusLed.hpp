@@ -14,9 +14,15 @@ enum LedType
 enum LedStatus
 {
   LED_OFF,
-  LED_OK,
-  LED_ERROR,
-  LED_ON,
+  LED_OK,           // disarmed, ready to arm      — blue slow blink
+  LED_ERROR,        // arming disabled              — red triple blink
+  LED_ON,           // legacy / init                — blue-white solid
+  LED_ARMED,        // armed, flying normally       — green solid
+  LED_ALTHOLD,      // altitude hold active         — cyan fast blink
+  LED_GPS,          // GPS position/rescue active   — purple double blink
+  LED_FAILSAFE,     // failsafe triggered           — red rapid blink
+  LED_CALIBRATING,  // gyro/sensor calibrating      — yellow solid
+  LED_LOW_BATTERY,  // low battery warning          — orange rapid blink
 };
 
 class StatusLed
@@ -38,6 +44,7 @@ private:
   bool _state;
   size_t _step;
   int * _pattern;
+  uint8_t _r, _g, _b;  // active color for WS2812 (GRB order stored as RGB for readability)
 };
 
 }
