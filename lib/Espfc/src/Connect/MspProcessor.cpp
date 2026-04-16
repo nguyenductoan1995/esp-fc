@@ -5,6 +5,7 @@
 #include <limits>
 #if defined(ESPFC_MULTI_CORE) && defined(ESPFC_FREE_RTOS)
 #include <driver/timer.h>
+#include <freertos/task.h>
 #endif
 
 #define VTXCOMMON_MSP_BANDCHAN_CHKVAL ((uint16_t)((7 << 3) + 7))
@@ -151,7 +152,9 @@ static uint16_t toIbatCurrent(float current)
   return constrain(lrintf(current * 100.0f), -32000, 32000);
 }
 
-constexpr uint8_t MSP_PASSTHROUGH_ESC_4WAY = 0xff;
+constexpr uint8_t MSP_PASSTHROUGH_SERIAL_ID          = 0;
+constexpr uint8_t MSP_PASSTHROUGH_SERIAL_FUNCTION_ID = 1;
+constexpr uint8_t MSP_PASSTHROUGH_ESC_4WAY           = 0xff;
 
 }
 
@@ -1488,11 +1491,43 @@ void MspProcessor::processCommand(MspMessage& m, MspResponse& r, Device::SerialD
             serialDeviceInit(&s, 0);
             _postCommand = std::bind(&MspProcessor::processEsc4way, this);
             break;
+          case MSP_PASSTHROUGH_SERIAL_ID:
+            {
+              int idx = _model.getSerialIndex((SerialPortId)ptArg);
+              Device::SerialDevice* target = (idx >= 0) ? _model.state.serial[idx].stream : nullptr;
+              if(target && target != &s)
+              {
+                _passthroughSource = &s;
+                _passthroughTarget = target;
+                r.writeU8(1);
+                _postCommand = std::bind(&MspProcessor::processPassthrough, this);
+              }
+              else
+              {
+                r.writeU8(0);
+              }
+            }
+            break;
+          case MSP_PASSTHROUGH_SERIAL_FUNCTION_ID:
+            {
+              Device::SerialDevice* target = _model.getSerialStream((SerialFunction)(1 << ptArg));
+              if(target && target != &s)
+              {
+                _passthroughSource = &s;
+                _passthroughTarget = target;
+                r.writeU8(1);
+                _postCommand = std::bind(&MspProcessor::processPassthrough, this);
+              }
+              else
+              {
+                r.writeU8(0);
+              }
+            }
+            break;
           default:
             r.writeU8(0);
             break;
         }
-        (void)ptArg;
       }
       break;
 
@@ -1581,6 +1616,57 @@ void MspProcessor::processEsc4way()
   timer_pause(TIMER_GROUP_0, TIMER_0);
 #endif
   esc4wayProcess(getSerialPort());
+  processRestart();
+}
+
+void MspProcessor::processPassthrough()
+{
+#if defined(ESPFC_MULTI_CORE) && defined(ESPFC_FREE_RTOS)
+  timer_pause(TIMER_GROUP_0, TIMER_0);
+#endif
+
+  Device::SerialDevice* src = _passthroughSource;
+  Device::SerialDevice* tgt = _passthroughTarget;
+
+  if(!src || !tgt)
+  {
+    processRestart();
+    return;
+  }
+
+  constexpr uint32_t TIMEOUT_MS = 10000ul;
+  uint32_t lastActivity = millis();
+
+  while(true)
+  {
+    bool active = false;
+
+    while(src->available())
+    {
+      tgt->write((uint8_t)src->read());
+      active = true;
+    }
+
+    while(tgt->available())
+    {
+      src->write((uint8_t)tgt->read());
+      active = true;
+    }
+
+    if(active)
+    {
+      lastActivity = millis();
+    }
+    else if(millis() - lastActivity > TIMEOUT_MS)
+    {
+      break;
+    }
+
+#if defined(ESPFC_FREE_RTOS)
+    vTaskDelay(1);
+#endif
+  }
+
   processRestart();
 }
 

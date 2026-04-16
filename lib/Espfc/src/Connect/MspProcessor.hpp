@@ -17,6 +17,7 @@ public:
   bool parse(char c, MspMessage& msg);
   void processCommand(MspMessage& m, MspResponse& r, Device::SerialDevice& s);
   void processEsc4way();
+  void processPassthrough();
   void processRestart();
   void serializeFlashData(MspResponse& r, uint32_t address, const uint16_t size, bool useLegacyFormat, bool allowCompression);
 
@@ -30,6 +31,8 @@ private:
   Model& _model;
   MspParser _parser;
   std::function<void(void)> _postCommand;
+  Device::SerialDevice* _passthroughSource = nullptr;
+  Device::SerialDevice* _passthroughTarget = nullptr;
 };
 
 }
