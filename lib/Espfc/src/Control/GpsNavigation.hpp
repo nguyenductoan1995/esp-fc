@@ -37,6 +37,22 @@ static void gpsDistanceBearing(int32_t lat1e7, int32_t lon1e7, int32_t lat2e7, i
   bearingOut = atan2f(sinDlon * cosLat2, cosLat1 * sinLat2 - sinLat1 * cosLat2 * cosDlon);
 }
 
+/**
+ * Cascade PID position hold controller:
+ *
+ *  Outer loop (position, ~10Hz GPS rate):
+ *    distance error (m) --> velocity setpoint (m/s)   [P only]
+ *
+ *  Inner loop (velocity, ~10Hz GPS rate):
+ *    velocity error (m/s) --> lean angle setpoint (rad)  [PID]
+ *      P  : immediate response to velocity error
+ *      I  : eliminates steady-state drift (wind, imbalance)
+ *      D  : damps overshoot when approaching setpoint
+ *
+ *  PID gains come from FC_PID_POS (outer) and FC_PID_POSR (inner).
+ *  I/D terms are only updated when fresh GPS data arrives (~10Hz).
+ *  All I terms are reset when mode is deactivated.
+ */
 class GpsNavigation
 {
 public:
@@ -46,6 +62,7 @@ public:
   {
     _velNorthFilter.begin(FilterConfig(FILTER_PT1, 2), 50); // 50Hz GPS rate max
     _velEastFilter.begin(FilterConfig(FILTER_PT1, 2), 50);
+    resetPid();
     return 1;
   }
 
@@ -53,17 +70,34 @@ public:
   {
     if(!_model.gpsActive()) return 0;
 
-    // Only recompute distance/bearing when GPS data is fresh (GPS ~10Hz, outerLoop ~500Hz)
-    if(_model.state.gps.lastMsgTs != _lastGpsMsgTs)
+    // Always update distance/bearing for OSD/telemetry regardless of mode
+    const bool gpsFresh = (_model.state.gps.lastMsgTs != _lastGpsMsgTs);
+    if(gpsFresh)
     {
       _lastGpsMsgTs = _model.state.gps.lastMsgTs;
       updateDistanceBearing();
     }
 
-    if(_model.isModeActive(MODE_POSHOLD) || _model.isModeActive(MODE_GPS_RESCUE))
+    const bool modeActive = _model.isModeActive(MODE_POSHOLD) || _model.isModeActive(MODE_GPS_RESCUE);
+
+    if(!modeActive)
     {
-      updatePositionSetpoint();
+      // Reset PID state when leaving mode so stale integral doesn't kick on re-entry
+      if(_wasActive) resetPid();
+      _wasActive = false;
+      return 1;
     }
+
+    // First frame after activation: seed prevErr to current error to avoid D spike
+    if(!_wasActive)
+    {
+      _prevErrNorth = 0.f;
+      _prevErrEast  = 0.f;
+      _firstFrame   = true;
+    }
+    _wasActive = true;
+
+    updatePositionSetpoint(gpsFresh);
 
     return 1;
   }
@@ -73,6 +107,17 @@ public:
   float velEast()  const { return _velEast; }
 
 private:
+  void resetPid()
+  {
+    _iTermNorth   = 0.f;
+    _iTermEast    = 0.f;
+    _prevErrNorth = 0.f;
+    _prevErrEast  = 0.f;
+    _dTermNorth   = 0.f;
+    _dTermEast    = 0.f;
+    _firstFrame   = true;
+  }
+
   void updateDistanceBearing()
   {
     if(!_model.state.gps.homeSet || !_model.state.gps.fix) return;
@@ -99,31 +144,65 @@ private:
     _velEast  = _velEastFilter.update(_model.state.gps.velocity.raw.east  * 0.001f);
   }
 
-  void updatePositionSetpoint()
+  void updatePositionSetpoint(bool gpsFresh)
   {
     if(!_model.state.gps.fix || _model.state.gps.numSats < _model.config.gps.minSats) return;
 
     const float dist    = (float)_model.state.gps.distanceToHome;
     const float bearing = _model.state.gps.bearingToHome;
+    const float maxLean = (float)_model.config.gps.maxLeanAngle * M_PI / 180.f;
 
-    // Position P controller: distance error -> velocity setpoint (m/s)
-    // FC_PID_POS.P used (0-255 scale -> 0..2.55 m/s per meter)
+    // --- Outer loop: position P → velocity setpoint ---
+    // FC_PID_POS.P: 0-255 scale → 0..2.55 m/s per meter
     const float posP = (float)_model.config.pid[FC_PID_POS].P * 0.01f;
-    float velSetpoint = std::min(dist * posP, GPS_MAX_VELOCITY);
+    const float velSetpoint = std::min(dist * posP, GPS_MAX_VELOCITY);
 
-    // decompose into North/East velocity setpoints
-    // for RTH: fly toward home (reverse of bearingToHome)
-    const float targetBearing = bearing + M_PI; // toward home
+    // Decompose into North/East velocity setpoints (fly toward hold point)
+    const float targetBearing = bearing + M_PI;
     const float velNorthSp = velSetpoint * cosf(targetBearing);
     const float velEastSp  = velSetpoint * sinf(targetBearing);
 
-    // Velocity P controller: velocity error -> lean angle setpoint (radians)
-    // FC_PID_POSR.P used
-    const float velP    = (float)_model.config.pid[FC_PID_POSR].P * 0.001f;
-    const float maxLean = (float)_model.config.gps.maxLeanAngle * M_PI / 180.f;
+    // --- Inner loop: velocity PID → lean angle setpoint ---
+    // FC_PID_POSR: P * 0.001, I * 0.0001, D * 0.00001
+    const float velP = (float)_model.config.pid[FC_PID_POSR].P * 0.001f;
+    const float velI = (float)_model.config.pid[FC_PID_POSR].I * 0.0001f;
+    const float velD = (float)_model.config.pid[FC_PID_POSR].D * 0.00001f;
 
-    _model.state.gps.posSetpoint[0] = std::clamp((velEastSp  - _velEast)  * velP, -maxLean, maxLean);
-    _model.state.gps.posSetpoint[1] = std::clamp((velNorthSp - _velNorth) * velP, -maxLean, maxLean);
+    const float errNorth = velNorthSp - _velNorth;
+    const float errEast  = velEastSp  - _velEast;
+
+    // I and D terms only advance on fresh GPS data to avoid dt=0 spikes
+    if(gpsFresh)
+    {
+      // dt from GPS interval (clamped to 50–500ms to guard against stale data)
+      const float dt = std::clamp((float)_model.state.gps.interval * 0.001f, 0.05f, 0.5f);
+
+      // Integrate error (wind / steady-state drift compensation)
+      _iTermNorth += errNorth * dt * velI;
+      _iTermEast  += errEast  * dt * velI;
+
+      // Clamp I terms to half maxLean to leave room for P
+      const float iLimit = maxLean * 0.5f;
+      _iTermNorth = std::clamp(_iTermNorth, -iLimit, iLimit);
+      _iTermEast  = std::clamp(_iTermEast,  -iLimit, iLimit);
+
+      // D term on error derivative (damps overshoot).
+      // Skipped on first frame to avoid spike from prevErr=0.
+      if(!_firstFrame)
+      {
+        _dTermNorth = (errNorth - _prevErrNorth) / dt * velD;
+        _dTermEast  = (errEast  - _prevErrEast)  / dt * velD;
+      }
+      _prevErrNorth = errNorth;
+      _prevErrEast  = errEast;
+      _firstFrame   = false;
+    }
+
+    const float pitchSp = errNorth * velP + _iTermNorth + _dTermNorth; // North → Pitch
+    const float rollSp  = errEast  * velP + _iTermEast  + _dTermEast;  // East  → Roll
+
+    _model.state.gps.posSetpoint[0] = std::clamp(rollSp,  -maxLean, maxLean);
+    _model.state.gps.posSetpoint[1] = std::clamp(pitchSp, -maxLean, maxLean);
   }
 
   static constexpr float GPS_MAX_VELOCITY = 5.f; // m/s max horizontal speed
@@ -134,6 +213,16 @@ private:
   float    _velNorth     = 0.f;
   float    _velEast      = 0.f;
   uint32_t _lastGpsMsgTs = 0;
+  bool     _wasActive    = false;
+  bool     _firstFrame   = true;
+
+  // Velocity PID state (North = Pitch axis, East = Roll axis)
+  float _iTermNorth   = 0.f;
+  float _iTermEast    = 0.f;
+  float _prevErrNorth = 0.f;
+  float _prevErrEast  = 0.f;
+  float _dTermNorth   = 0.f;
+  float _dTermEast    = 0.f;
 };
 
 }
