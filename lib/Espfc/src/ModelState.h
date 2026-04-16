@@ -327,6 +327,7 @@ struct ModeState
   uint32_t armingDisabledFlags;
   RescueConfigMode rescueConfigMode;
   bool airmodeAllowed;
+  bool autoHoverActive = false; // true once auto-hover threshold was crossed (cleared on disarm)
   uint32_t button;
   bool isSingleClickActive() const { return button & (1 << 0); }
   bool isDoubleClickActive() const { return button & (1 << 1); }

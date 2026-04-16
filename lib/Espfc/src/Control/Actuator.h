@@ -19,6 +19,7 @@ class Actuator
     void updateScaler();
     void updateArmingDisabled();
     void updateModeMask();
+    uint32_t autoHoverModeMask();
     bool canActivateMode(FlightMode mode);
     void updateArmed();
     void updateAirMode();

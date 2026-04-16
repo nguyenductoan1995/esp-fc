@@ -133,6 +133,9 @@ void Actuator::updateModeMask()
     newMask |= (1 << MODE_FAILSAFE);
   }
 
+  // Inject auto-hover forced modes (after switch tracking, before canActivateMode)
+  newMask |= autoHoverModeMask();
+
   for(size_t i = 0; i < MODE_COUNT; i++)
   {
     bool newVal = newMask & (1 << i);
@@ -145,6 +148,33 @@ void Actuator::updateModeMask()
   }
 
   _model.updateModes(newMask);
+}
+
+uint32_t Actuator::autoHoverModeMask()
+{
+  // Feature disabled or not armed
+  if(_model.config.altHold.autoHoverHeight == 0) return 0;
+  if(!_model.isModeActive(MODE_ARMED)) {
+    _model.state.mode.autoHoverActive = false;
+    return 0;
+  }
+
+  // Trigger once when drone reaches the configured height
+  if(!_model.state.mode.autoHoverActive)
+  {
+    if(_model.state.altitude.height >= (float)_model.config.altHold.autoHoverHeight)
+    {
+      _model.state.mode.autoHoverActive = true;
+    }
+  }
+
+  if(!_model.state.mode.autoHoverActive) return 0;
+
+  // Force ALTHOLD (requires baro) + POSHOLD (requires GPS)
+  uint32_t mask = 0;
+  if(_model.state.baro.dev)  mask |= (1 << MODE_ALTHOLD);
+  if(_model.gpsActive())     mask |= (1 << MODE_POSHOLD);
+  return mask;
 }
 
 bool Actuator::canActivateMode(FlightMode mode)

@@ -646,6 +646,7 @@ struct AltHoldConfig
 {
   uint8_t itermCenter = 50;
   uint8_t itermRange = 50;
+  uint8_t autoHoverHeight = 0;  // meters; when > 0, auto-activate AltHold+PosHold after reaching this height
 };
 
 struct MixerConfiguration

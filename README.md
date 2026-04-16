@@ -249,3 +249,31 @@ Nếu bạn thích dự án này và muốn nó tiếp tục được phát tri�
 
 * BTC: 1Lopez7yPtbyjfLGe892JfheDFJMMt43tW
 * LTC: LV3G3sJxz9AYpDMYUp8e1LCmerFYxVY3ak
+
+set pin_input_rx -1
+set pin_output_0 1
+set pin_output_1 2
+set pin_output_2 3
+set pin_output_3 4
+set pin_button -1
+set pin_buzzer -1
+set pin_led 48
+set pin_serial_0_tx -1
+set pin_serial_0_rx -1
+set pin_serial_1_tx 6
+set pin_serial_1_rx 5
+set pin_serial_2_tx -1
+set pin_serial_2_rx -1
+set pin_i2c_scl 10
+set pin_i2c_sda 9
+set pin_input_adc_0 -1
+set pin_input_adc_1 -1
+set pin_spi_0_sck 12
+set pin_spi_0_mosi 11
+set pin_spi_0_miso 13
+set pin_spi_cs_0 8
+set pin_spi_cs_1 7
+set pin_spi_cs_2 -1
+set pin_buzzer_invert 1
+set pin_led_invert 0
+set pin_led_type STRIP
